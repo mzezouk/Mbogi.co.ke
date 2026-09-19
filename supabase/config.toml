@@ -1,0 +1,2 @@
+[functions.smartpay-webhook]
+verify_jwt = false

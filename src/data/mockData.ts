@@ -1,0 +1,377 @@
+import { UserProfile, WalletTransaction, InvitedUser, BlogArticle, ChatConversation, AppNotification } from '../types';
+
+export const initialUser: UserProfile = {
+  id: 'usr_88291',
+  name: 'Kelvin Omondi',
+  username: 'omondi_ke',
+  phone: '+254 712 345 678',
+  email: 'kelvin.omondi@gmail.com',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  referralCode: 'MBOKA-9042',
+  isKycVerified: true,
+  role: 'user',
+  joinedDate: 'Jan 2026',
+  pin: '1234',
+};
+
+export const initialTransactions: WalletTransaction[] = [
+  {
+    id: 'tx_991',
+    type: 'deposit',
+    title: 'M-Pesa Express Deposit',
+    category: 'wallet',
+    amount: 2500,
+    fee: 0,
+    date: 'Today, 10:45 AM',
+    reference: 'SL89XK2941',
+    status: 'completed',
+    recipientOrSender: 'M-Pesa (+254 712 345 678)',
+    notes: 'Direct STK Push topup',
+  },
+  {
+    id: 'tx_990',
+    type: 'pos_purchase',
+    title: 'KPLC Prepaid Tokens (Meter 3719048102)',
+    category: 'pos',
+    amount: 1000,
+    fee: 0,
+    date: 'Yesterday, 4:15 PM',
+    reference: 'KPLC-89028',
+    status: 'completed',
+    recipientOrSender: 'Kenya Power Lighting Co.',
+    metadata: {
+      token: '4920-1849-0193-8401-9281',
+      units: '42.8 kWh',
+    },
+  },
+  {
+    id: 'tx_989',
+    type: 'affiliate_payout',
+    title: 'Affiliate Referral Reward (Brian Mutua)',
+    category: 'affiliate',
+    amount: 150,
+    fee: 0,
+    date: 'Yesterday, 1:20 PM',
+    reference: 'REF-B4910',
+    status: 'completed',
+    recipientOrSender: 'Mboka Affiliate Pool',
+  },
+  {
+    id: 'tx_988',
+    type: 'transfer_out',
+    title: 'Sent Money to Faith Wanjiku',
+    category: 'p2p',
+    amount: 650,
+    fee: 0,
+    date: '17 Sep, 8:30 PM',
+    reference: 'P2P-90184',
+    status: 'completed',
+    recipientOrSender: '@faith_wanjiku',
+    notes: 'Lunch & coffee contribution',
+  },
+  {
+    id: 'tx_987',
+    type: 'blog_payout',
+    title: 'Blog Ad Revenue (August Cycle)',
+    category: 'blog',
+    amount: 1240,
+    fee: 0,
+    date: '15 Sep, 11:00 AM',
+    reference: 'ADREV-8802',
+    status: 'completed',
+    recipientOrSender: 'Mboka Creator Monetization',
+  },
+  {
+    id: 'tx_986',
+    type: 'pos_purchase',
+    title: 'Safaricom Airtime Topup',
+    category: 'pos',
+    amount: 200,
+    fee: 0,
+    date: '14 Sep, 3:10 PM',
+    reference: 'SAF-281093',
+    status: 'completed',
+    recipientOrSender: '+254 798 112 334',
+    metadata: {
+      cashback: 4,
+    },
+  },
+];
+
+export const initialInvitedUsers: InvitedUser[] = [
+  {
+    id: 'inv_1',
+    name: 'Brian Mutua',
+    phone: '+254 722 *** 190',
+    registeredDate: 'Yesterday',
+    status: 'qualified',
+    earnedCommission: 150,
+  },
+  {
+    id: 'inv_2',
+    name: 'Mercy Achieng',
+    phone: '+254 701 *** 882',
+    registeredDate: '3 days ago',
+    status: 'qualified',
+    earnedCommission: 150,
+  },
+  {
+    id: 'inv_3',
+    name: 'Samuel Kiprop',
+    phone: '+254 743 *** 501',
+    registeredDate: '5 days ago',
+    status: 'active',
+    earnedCommission: 150,
+  },
+  {
+    id: 'inv_4',
+    name: 'Diana Muthoni',
+    phone: '+254 718 *** 994',
+    registeredDate: '1 week ago',
+    status: 'registered',
+    earnedCommission: 0,
+  },
+  {
+    id: 'inv_5',
+    name: 'Evans Omondi',
+    phone: '+254 734 *** 229',
+    registeredDate: '1 week ago',
+    status: 'qualified',
+    earnedCommission: 150,
+  },
+];
+
+export const initialArticles: BlogArticle[] = [
+  {
+    id: 'art_1',
+    title: 'How to Run a Profitable POS & Digital Utilities Shop in Nairobi',
+    excerpt: 'Detailed breakdown of capital requirements, choosing high-traffic stalls, managing KPLC float, and stacking airtime commissions.',
+    content: `Running a digital point-of-sale agency in Nairobi is one of the most reliable daily-cashflow businesses if executed strategically.
+
+### 1. Capital Allocation & Float Balancing
+The golden rule is separating your operational expenses from your trading float.
+- **Minimum recommended float**: KSh 15,000 divided between KPLC electricity tokens (60%) and mobile airtime (40%).
+- Keep an emergency reserve to prevent turning away high-value token customers during peak evening hours (6:00 PM – 9:00 PM).
+
+### 2. Location Selection
+Look for proximity to:
+- High-density residential estates (e.g. Roysambu, Kasarani, Umoja, South B)
+- Boda boda stages and matatu terminals
+- Shared retail spaces like salons or chemist shops to split rent overhead.
+
+### 3. Upselling & Building Customer Loyalty
+Using the Mboka POS platform gives you 2% - 3.5% instant margins. Provide instant WhatsApp receipts—customers love not losing their 20-digit token numbers!`,
+    category: 'Business & Hustle',
+    coverImage: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800&auto=format&fit=crop&q=80',
+    authorId: 'usr_88291',
+    authorName: 'Kelvin Omondi',
+    authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    date: 'Sep 16, 2026',
+    readTime: '4 min read',
+    views: 1420,
+    likes: 89,
+    commentsCount: 14,
+    adImpressions: 2180,
+    estimatedEarnings: 840,
+    isFeatured: true,
+    isApproved: true,
+  },
+  {
+    id: 'art_2',
+    title: 'Smart Poultry Farming: Maximizing Egg Production with Automated Lighting',
+    excerpt: 'How Kenyan agropreneurs are doubling egg yield in dry seasons with affordable solar timers and balanced nutrient feed.',
+    content: `Agribusiness remains a pillar of sustainable income in Kenya. Today, poultry farmers in Kiambu, Nakuru, and Machakos are tapping into smart tech.
+
+### Photoperiod Management
+Laying birds require approximately 14 to 16 hours of light per day for optimal pituitary gland stimulation:
+- Installing low-wattage solar LED bulbs programmed with a basic timer adds 3 hours of illumination before sunrise.
+- Results consistently demonstrate a 15% to 22% increase in weekly laying percentage.
+
+### Feed Quality & Water Hygiene
+Always test your feed crude protein level (target 16-18% for layers). Adding water sanitizers prevents common digestive setbacks that halt laying cycles.`,
+    category: 'Agribusiness',
+    coverImage: 'https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=800&auto=format&fit=crop&q=80',
+    authorId: 'usr_2041',
+    authorName: 'Wanjiku Kamau',
+    authorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    date: 'Sep 14, 2026',
+    readTime: '5 min read',
+    views: 980,
+    likes: 64,
+    commentsCount: 8,
+    adImpressions: 1450,
+    estimatedEarnings: 400,
+    isApproved: true,
+  },
+  {
+    id: 'art_3',
+    title: 'Demystifying the M-Pesa Super-App & Modern Mobile Ledgers',
+    excerpt: 'Why integrated ecosystems like Mboka simplify multi-income tracking for modern freelancers, gig workers, and traders.',
+    content: `Managing money across multiple gigs used to mean checking three different banking apps, four SMS receipts, and paper notebooks.
+
+### Centralized Identity & Ledger
+When wallet, affiliate commissions, and utility purchases live in a single unified ledger:
+1. Reconciling daily profits becomes automated.
+2. Instant P2P zero-fee transfers eliminate unnecessary banking charges.
+3. Creators can turn their attention directly to what they do best: producing quality work.`,
+    category: 'Technology',
+    coverImage: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&auto=format&fit=crop&q=80',
+    authorId: 'usr_9918',
+    authorName: 'Dan Kiprono',
+    authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    date: 'Sep 12, 2026',
+    readTime: '3 min read',
+    views: 2150,
+    likes: 142,
+    commentsCount: 23,
+    adImpressions: 3300,
+    estimatedEarnings: 1120,
+    isApproved: true,
+  },
+];
+
+export const initialConversations: ChatConversation[] = [
+  {
+    id: 'conv_1',
+    name: 'Nairobi Hustlers & Tech Guild',
+    avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
+    isGroup: true,
+    badge: 'Trending Community',
+    lastMessage: 'Evans: Stima tokens just bought via Mboka arrived in 2 secs!',
+    lastMessageTime: '10:52 AM',
+    unreadCount: 3,
+    membersCount: 842,
+    description: 'The official networking group for Kenyan freelancers, POS agents, tech innovators, and young entrepreneurs.',
+    messages: [
+      {
+        id: 'm1',
+        senderId: 'usr_201',
+        senderName: 'Faith Mwangi',
+        senderAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+        text: 'Habari zenu! Anyone running an airtime reseller station near Westlands?',
+        timestamp: '10:30 AM',
+        isMe: false,
+      },
+      {
+        id: 'm2',
+        senderId: 'usr_88291',
+        senderName: 'Kelvin Omondi',
+        senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        text: 'Yes Faith! Check my new article on the Mboka blog on setting up POS floats. You get 2-3% cashback instantly.',
+        timestamp: '10:35 AM',
+        isMe: true,
+      },
+      {
+        id: 'm3',
+        senderId: 'usr_402',
+        senderName: 'Evans Kip',
+        senderAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+        text: 'Evans: Stima tokens just bought via Mboka arrived in 2 secs! Highly recommend!',
+        timestamp: '10:52 AM',
+        isMe: false,
+      },
+    ],
+  },
+  {
+    id: 'conv_2',
+    name: 'Mboka Official Support 24/7',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    isGroup: false,
+    badge: 'Verified Agent',
+    lastMessage: 'Agent Brenda: Your KYC verification has been reviewed and approved.',
+    lastMessageTime: 'Yesterday',
+    unreadCount: 0,
+    description: 'Official customer care desk for Mboka Wallet, settlements, and POS merchant queries.',
+    messages: [
+      {
+        id: 'sup1',
+        senderId: 'usr_88291',
+        senderName: 'Kelvin Omondi',
+        senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        text: 'Hi Brenda, I submitted my national ID for level 2 KYC. Please confirm.',
+        timestamp: 'Yesterday 2:00 PM',
+        isMe: true,
+      },
+      {
+        id: 'sup2',
+        senderId: 'agent_brenda',
+        senderName: 'Agent Brenda',
+        senderAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+        text: 'Agent Brenda: Your KYC verification has been reviewed and approved. Your transaction limit is now KSh 300,000 per day!',
+        timestamp: 'Yesterday 2:15 PM',
+        isMe: false,
+      },
+    ],
+  },
+  {
+    id: 'conv_3',
+    name: 'KPLC & Utilities Alert Hub',
+    avatar: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=150&auto=format&fit=crop&q=80',
+    isGroup: true,
+    badge: 'Utility Tracker',
+    lastMessage: 'Power maintenance scheduled in Kilimani on Sunday 9am-5pm.',
+    lastMessageTime: 'Sep 17',
+    unreadCount: 0,
+    membersCount: 1420,
+    description: 'Community alerts on power outages, token generation status, and water billing updates.',
+    messages: [
+      {
+        id: 'util1',
+        senderId: 'sys_admin',
+        senderName: 'Mboka Bot',
+        senderAvatar: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=150&auto=format&fit=crop&q=80',
+        text: 'System alert: Kenya Power prepaid server response time is normal (< 3 seconds).',
+        timestamp: 'Sep 17 8:00 AM',
+        isMe: false,
+      },
+      {
+        id: 'util2',
+        senderId: 'usr_88291',
+        senderName: 'Kelvin Omondi',
+        senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        text: 'Thanks for the alert! Generated my token smoothly this morning.',
+        timestamp: 'Sep 17 8:15 AM',
+        isMe: true,
+      },
+    ],
+  },
+];
+
+export const initialNotifications: AppNotification[] = [
+  {
+    id: 'n1',
+    title: 'M-Pesa Deposit Received',
+    message: 'KSh 2,500 deposited successfully via STK Push. Reference: SL89XK2941.',
+    type: 'wallet',
+    timestamp: '10:45 AM',
+    read: false,
+    linkTab: 'wallet',
+  },
+  {
+    id: 'n2',
+    title: 'New Affiliate Commission',
+    message: 'Brian Mutua registered with code MBOKA-9042. You earned KSh 150!',
+    type: 'affiliate',
+    timestamp: 'Yesterday',
+    read: false,
+    linkTab: 'affiliate',
+  },
+  {
+    id: 'n3',
+    title: 'KPLC Token Generated',
+    message: 'Token 4920-1849-0193-8401-9281 (42.8 kWh) ready to load on meter 3719048102.',
+    type: 'pos',
+    timestamp: 'Yesterday',
+    read: true,
+    linkTab: 'pos',
+  },
+  {
+    id: 'n4',
+    title: 'Blog Ad Revenue Milestone',
+    message: 'Your article on POS shops crossed 1,000 views. KSh 840 earned!',
+    type: 'blog',
+    timestamp: '2 days ago',
+    read: true,
+    linkTab: 'blog',
+  },
+];
