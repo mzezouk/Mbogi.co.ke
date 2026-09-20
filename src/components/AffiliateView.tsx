@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Award,
   Wallet,
-  Sparkles,
   RefreshCw,
 } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';

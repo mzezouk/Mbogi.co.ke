@@ -6,7 +6,6 @@ import {
   Tv,
   Receipt,
   ArrowRight,
-  Sparkles,
   CheckCircle2,
   Share2,
   Printer,

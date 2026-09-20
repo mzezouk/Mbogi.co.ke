@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Bot, User, Sparkles, Loader2, ArrowRight } from 'lucide-react';
+import { X, Send, Headphones, User, Loader2, ArrowRight } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';
 
 interface AiMessage {
@@ -20,7 +20,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ onClose }) =
       id: 'init-1',
       role: 'assistant',
       content:
-        'Sasa! 👋 I am your Mboka Copilot. Ask me anything about deposits, KPLC electricity tokens, affiliate earnings, blogging monetization, or setting up a POS shop!',
+        'Sasa! 👋 I am your Mboka Support Desk. Ask me anything about deposits, KPLC electricity tokens, affiliate earnings, blogging monetization, or setting up a POS shop!',
     },
   ]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -95,24 +95,24 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ onClose }) =
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
       <div className="relative w-full max-w-xl h-[85vh] max-h-[680px] bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="p-4 bg-gradient-to-r from-emerald-800 via-emerald-900 to-teal-900 text-white flex items-center justify-between shadow-xs">
+        <div className="p-4 bg-slate-900 border-b border-slate-800 text-white flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
-              <Bot className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <Headphones className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm font-heading">Mboka AI Copilot</h3>
-                <span className="text-[10px] bg-emerald-400/20 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/20">
-                  Gemini-Powered
+                <h3 className="font-bold text-sm font-heading">Mboka Support Desk</h3>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/20 font-medium">
+                  24/7 Agency Desk
                 </span>
               </div>
-              <p className="text-[11px] text-emerald-200/80">Smart Financial & Ecosystem Assistant</p>
+              <p className="text-[11px] text-slate-400">Operations & Financial Assistant</p>
             </div>
           </div>
           <button
             onClick={() => setIsAiCopilotOpen(false)}
-            className="p-1.5 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -126,8 +126,8 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ onClose }) =
               className={`flex gap-3 text-sm ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {m.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="w-4 h-4 text-emerald-200" />
+                <div className="w-7 h-7 rounded-lg bg-emerald-800 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <Headphones className="w-4 h-4 text-emerald-200" />
                 </div>
               )}
               <div
@@ -149,11 +149,11 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ onClose }) =
 
           {isLoading && (
             <div className="flex gap-3 text-sm justify-start">
-              <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-emerald-800 text-white flex items-center justify-center shrink-0">
                 <Loader2 className="w-4 h-4 animate-spin text-emerald-200" />
               </div>
               <div className="bg-white text-slate-500 rounded-2xl rounded-tl-xs px-4 py-2.5 border border-slate-200/80 shadow-xs text-xs flex items-center gap-2">
-                <span>Mboka Copilot is thinking...</span>
+                <span>Mboka Support is processing...</span>
               </div>
             </div>
           )}

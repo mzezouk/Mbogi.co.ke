@@ -9,7 +9,7 @@ import {
   User,
   Shield,
   Bell,
-  Sparkles,
+  Headphones,
   Eye,
   EyeOff,
   CheckCircle2,
@@ -17,8 +17,10 @@ import {
   Menu,
   X,
   Database,
+  UserPlus,
 } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';
+import { AuthModal } from './AuthModal';
 import { ActiveTab } from '../types';
 
 export const Navbar: React.FC = () => {
@@ -41,6 +43,7 @@ export const Navbar: React.FC = () => {
   const [hideBalance, setHideBalance] = useState<boolean>(false);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -125,13 +128,13 @@ export const Navbar: React.FC = () => {
               </button>
             </div>
 
-            {/* AI Copilot Button */}
+            {/* Support Desk Button */}
             <button
               onClick={() => setIsAiCopilotOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer group"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-200 group-hover:rotate-12 transition-transform" />
-              <span className="hidden md:inline">Mboka AI</span>
+              <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">Support Desk</span>
             </button>
 
             {/* Supabase Database Status Pill */}
@@ -258,6 +261,16 @@ export const Navbar: React.FC = () => {
               )}
             </div>
 
+            {/* Sign Up / Switch Account Button */}
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 text-xs font-bold transition-all cursor-pointer"
+              title="Register a new real user account with positive balance"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Sign Up</span>
+            </button>
+
             {/* Profile Avatar */}
             <button
               onClick={() => {
@@ -296,6 +309,17 @@ export const Navbar: React.FC = () => {
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-1 shadow-lg animate-in slide-in-from-top-2">
+          <button
+            onClick={() => {
+              setShowAuthModal(true);
+              setMobileMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 mb-2"
+          >
+            <UserPlus className="w-5 h-5 text-emerald-600" />
+            <span>Create Account / Sign Up (Bal &gt; 0)</span>
+          </button>
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id && !isAdminMode;
@@ -318,6 +342,8 @@ export const Navbar: React.FC = () => {
           })}
         </div>
       )}
+
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </header>
   );
 };

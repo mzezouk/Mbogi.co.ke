@@ -43,12 +43,14 @@ export interface StkPushResponse {
 
 export interface StkStatusResponse {
   success: boolean;
-  status: 'COMPLETED' | 'PENDING' | 'FAILED';
+  status: 'COMPLETED' | 'PENDING' | 'FAILED' | 'CANCELLED';
+  resultCode?: number;
   receipt?: string;
   amount?: number;
   phone?: string;
   message?: string;
   completedAt?: string;
+  checkoutRequestId?: string;
 }
 
 export interface B2cPayoutResponse {
@@ -139,6 +141,101 @@ export const smartpayService = {
   },
 
   /**
+   * C2B: Real-time EventSource subscriber for instant webhook notifications
+   * Returns a cleanup function to close connection
+   */
+  subscribeStkEvents(
+    checkoutRequestId: string,
+    onEvent: (status: StkStatusResponse) => void
+  ): () => void {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+      return () => {};
+    }
+
+    try {
+      const eventSource = new EventSource(
+        `/api/smartpay/c2b/events/${encodeURIComponent(checkoutRequestId)}`
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data: StkStatusResponse = JSON.parse(event.data);
+          onEvent(data);
+          if (data.status === 'COMPLETED' || data.status === 'CANCELLED' || data.status === 'FAILED') {
+            eventSource.close();
+          }
+        } catch (e) {
+          console.warn('Error parsing SSE event:', e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        // Fall back gracefully to regular polling
+        eventSource.close();
+      };
+
+      return () => {
+        eventSource.close();
+      };
+    } catch {
+      return () => {};
+    }
+  },
+
+  /**
+   * C2B: Explicitly cancel an in-flight STK push request
+   */
+  async cancelStkPush(params: {
+    checkoutRequestId: string;
+    phone?: string;
+    amount?: number;
+    reason?: string;
+  }): Promise<StkStatusResponse> {
+    try {
+      const res = await fetch('/api/smartpay/c2b/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      return data;
+    } catch (e: any) {
+      return {
+        success: false,
+        status: 'CANCELLED',
+        message: e?.message || 'Deposit cancelled',
+      };
+    }
+  },
+
+  /**
+   * C2B: Simulate an approved or cancelled webhook event for testing
+   */
+  async simulateWebhookEvent(params: {
+    checkoutRequestId: string;
+    eventType: 'cancel' | 'complete';
+    amount?: number;
+    phone?: string;
+    reason?: string;
+  }): Promise<StkStatusResponse> {
+    try {
+      const res = await fetch('/api/smartpay/c2b/simulate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      const data = await res.json();
+      return data;
+    } catch (e: any) {
+      return {
+        success: false,
+        status: params.eventType === 'cancel' ? 'CANCELLED' : 'COMPLETED',
+        message: e?.message || 'Simulation executed',
+      };
+    }
+  },
+
+  /**
    * Helper: Poll for STK push completion until resolved or timeout
    */
   async pollStkConfirmation(
@@ -147,13 +244,13 @@ export const smartpayService = {
     maxWaitSeconds = 25
   ): Promise<StkStatusResponse> {
     const startTime = Date.now();
-    const intervalMs = 2000;
+    const intervalMs = 1500;
 
     while (Date.now() - startTime < maxWaitSeconds * 1000) {
       const status = await this.checkStkStatus(checkoutRequestId);
       if (onPoll) onPoll(status);
 
-      if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+      if (status.status === 'COMPLETED' || status.status === 'CANCELLED' || status.status === 'FAILED') {
         return status;
       }
 
@@ -161,9 +258,9 @@ export const smartpayService = {
     }
 
     return {
-      success: true,
-      status: 'COMPLETED', // Fallback gracefully if timed out polling
-      message: 'Payment received. Funds credited to Mboka Wallet float.',
+      success: false,
+      status: 'CANCELLED',
+      message: 'M-Pesa authorization prompt timed out on handset.',
     };
   },
 

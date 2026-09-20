@@ -9,20 +9,26 @@ import {
   Users,
   PenTool,
   MessageSquare,
-  Sparkles,
   ChevronRight,
-  TrendingUp,
   Receipt,
   Eye,
   EyeOff,
   ShieldCheck,
   CheckCircle2,
   Clock,
+  Mail,
+  MapPin,
+  HelpCircle,
+  Headphones,
+  UserPlus,
+  KeyRound,
+  ExternalLink,
 } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';
 import { DepositModal } from './DepositModal';
 import { WithdrawModal } from './WithdrawModal';
 import { SendMoneyModal } from './SendMoneyModal';
+import { AuthModal } from './AuthModal';
 import { WalletTransaction } from '../types';
 
 export const HomeView: React.FC = () => {
@@ -34,7 +40,6 @@ export const HomeView: React.FC = () => {
     transactions,
     setActiveTab,
     formatKsh,
-    articles,
     setSelectedReceipt,
     setIsAiCopilotOpen,
   } = useMboka();
@@ -43,62 +48,78 @@ export const HomeView: React.FC = () => {
   const [showDeposit, setShowDeposit] = useState<boolean>(false);
   const [showWithdraw, setShowWithdraw] = useState<boolean>(false);
   const [showSendMoney, setShowSendMoney] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
 
   const recentTxs = transactions.slice(0, 5);
 
   const openReceiptFromTx = (tx: WalletTransaction) => {
-    if (tx.category === 'pos' || tx.metadata?.token) {
-      setSelectedReceipt({
-        receiptNumber: tx.reference,
-        serviceType: tx.title.includes('Airtime') ? 'airtime' : tx.title.includes('KPLC') ? 'kplc' : 'tv',
-        serviceName: tx.title,
-        accountOrPhone: tx.recipientOrSender || user.phone,
-        amount: tx.amount,
-        fee: tx.fee,
-        date: tx.date,
-        token: tx.metadata?.token,
-        units: tx.metadata?.units ? parseFloat(tx.metadata.units) : undefined,
-        provider: tx.title.includes('KPLC') ? 'Kenya Power' : tx.title.includes('Safaricom') ? 'Safaricom' : 'Digital Services',
-        operator: 'Mboka Express',
-        cashbackEarned: tx.metadata?.cashback,
-      });
-    }
+    setSelectedReceipt({
+      receiptNumber: tx.reference,
+      serviceType: tx.title.includes('Airtime')
+        ? 'airtime'
+        : tx.title.includes('KPLC')
+        ? 'kplc'
+        : 'tv',
+      serviceName: tx.title,
+      accountOrPhone: tx.recipientOrSender || user.phone,
+      amount: tx.amount,
+      fee: tx.fee,
+      date: tx.date,
+      token: tx.metadata?.token,
+      units: tx.metadata?.units ? parseFloat(tx.metadata.units) : undefined,
+      provider: tx.title.includes('KPLC')
+        ? 'Kenya Power'
+        : tx.title.includes('Safaricom')
+        ? 'Safaricom'
+        : 'Mboka Network',
+      operator: 'Mboka Express',
+      cashbackEarned: tx.metadata?.cashback,
+    });
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Welcome Banner */}
+      {/* 1. Header Bar with Greeting & Quick Account Options */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-heading">
               Sasa, {user.name.split(' ')[0]}!
             </h1>
-            {user.isKycVerified && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Verified
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Verified Account
+            </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Your centralized financial ledger, affiliate network & utility hub.
+            Your centralized financial ledger, M-Pesa B2C disbursements &amp; contact hub.
           </p>
         </div>
 
-        {/* Quick AI Advisor pill */}
-        <button
-          onClick={() => setIsAiCopilotOpen(true)}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-300 text-emerald-900 text-xs font-bold transition-all self-start sm:self-auto cursor-pointer shadow-2xs"
-        >
-          <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
-          <span>Need help? Ask Mboka Copilot</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Sign Up / Switch User button */}
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            title="Register a new real user account with starting balance > 0"
+          >
+            <UserPlus className="w-3.5 h-3.5 text-slate-600" />
+            <span>Sign Up / Switch</span>
+          </button>
+
+          {/* Quick Support Desk */}
+          <button
+            onClick={() => setIsAiCopilotOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+          >
+            <Headphones className="w-3.5 h-3.5 text-slate-600" />
+            <span>Support Desk</span>
+          </button>
+        </div>
       </div>
 
-      {/* 1. Main Wallet Hero Card */}
+      {/* 2. Main Wallet Hero Card */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-emerald-950 to-teal-950 text-white p-6 sm:p-8 shadow-xl border border-slate-800">
-        {/* Subtle background glow */}
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-10 w-48 h-48 bg-teal-500/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -108,7 +129,7 @@ export const HomeView: React.FC = () => {
               <span>Mboka Central Wallet</span>
               <button
                 onClick={() => setHideBalance(!hideBalance)}
-                className="text-emerald-400/80 hover:text-emerald-300 p-0.5"
+                className="text-emerald-400/80 hover:text-emerald-300 p-0.5 cursor-pointer"
                 title={hideBalance ? 'Show balance' : 'Hide balance'}
               >
                 {hideBalance ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
@@ -130,6 +151,9 @@ export const HomeView: React.FC = () => {
                 <PenTool className="w-3.5 h-3.5 text-blue-400" />
                 <span>Blog Ad Rev:</span>
                 <strong className="text-white font-mono">{formatKsh(blogBalance)}</strong>
+              </span>
+              <span className="text-[11px] text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-500/30">
+                B2C: 10–100 Free • 10+ Bal Required
               </span>
             </div>
           </div>
@@ -163,257 +187,294 @@ export const HomeView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Quick Digital Utility Services (POS Quick Access) */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="flex items-center justify-between mb-4">
+      {/* 3. Clean Digital Utilities Grid */}
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-slate-900 font-heading">Digital Utilities & POS</h2>
-            <p className="text-xs text-slate-500">Instant tokens, airtime, and subscriptions with cashback</p>
+            <h2 className="text-base font-bold text-slate-900 font-heading">
+              Quick Utilities &amp; Airtime
+            </h2>
+            <p className="text-xs text-slate-500">
+              Instant dispatch directly from your central wallet balance
+            </p>
           </div>
           <button
             onClick={() => setActiveTab('pos')}
-            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1"
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
           >
-            <span>POS Merchant Portal</span>
+            <span>Open POS Terminal</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          {/* Airtime */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <button
             onClick={() => setActiveTab('pos')}
-            className="flex items-start gap-3.5 p-4 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-emerald-50/50 hover:border-emerald-200 transition-all text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200/70 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all text-left group cursor-pointer"
           >
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
               <Phone className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-slate-900">Buy Airtime</span>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-sm">
-                  2% Back
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">Safaricom, Airtel, Telkom top-up</p>
-            </div>
+            <h3 className="text-xs font-bold text-slate-900">Buy Airtime</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">Safaricom &amp; Airtel</p>
+            <span className="inline-block text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded-sm mt-2">
+              2% Cashback
+            </span>
           </button>
 
-          {/* KPLC Tokens */}
           <button
             onClick={() => setActiveTab('pos')}
-            className="flex items-start gap-3.5 p-4 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-amber-50/50 hover:border-amber-200 transition-all text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200/70 hover:border-amber-300 hover:bg-amber-50/30 transition-all text-left group cursor-pointer"
           >
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
               <Zap className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-slate-900">KPLC Tokens</span>
-                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded-sm">
-                  Instant
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">20-digit prepaid stima tokens</p>
-            </div>
+            <h3 className="text-xs font-bold text-slate-900">KPLC Tokens</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">Prepaid &amp; Postpaid</p>
+            <span className="inline-block text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded-sm mt-2">
+              Instant 20-digit
+            </span>
           </button>
 
-          {/* TV Subscriptions */}
           <button
             onClick={() => setActiveTab('pos')}
-            className="flex items-start gap-3.5 p-4 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-blue-50/50 hover:border-blue-200 transition-all text-left cursor-pointer group"
+            className="p-4 rounded-xl border border-slate-200/70 hover:border-blue-300 hover:bg-blue-50/30 transition-all text-left group cursor-pointer"
           >
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
               <Tv className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-slate-900">TV Packages</span>
-                <span className="text-[10px] font-bold text-blue-800 bg-blue-100 px-1.5 py-0.2 rounded-sm">
-                  DStv / GOtv
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">Direct decoder renewal</p>
+            <h3 className="text-xs font-bold text-slate-900">Pay TV Bills</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">DStv, GOtv &amp; StarTimes</p>
+            <span className="inline-block text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded-sm mt-2">
+              Zero surcharge
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('wallet')}
+            className="p-4 rounded-xl border border-slate-200/70 hover:border-teal-300 hover:bg-teal-50/30 transition-all text-left group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+              <Send className="w-5 h-5" />
             </div>
+            <h3 className="text-xs font-bold text-slate-900">P2P Transfers</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">Member-to-Member</p>
+            <span className="inline-block text-[10px] text-teal-700 font-bold bg-teal-50 px-1.5 py-0.5 rounded-sm mt-2">
+              Free internal
+            </span>
           </button>
         </div>
       </div>
 
-      {/* 3. Earn on Mboka (Affiliate & Blogging) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Affiliate Card */}
-        <div className="bg-gradient-to-br from-amber-500/10 via-amber-50/40 to-white p-5 sm:p-6 rounded-2xl border border-amber-200/80 shadow-xs flex flex-col justify-between">
+      {/* 4. Dedicated Customer Contact & Support Center */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-1 rounded-lg">
-                <Users className="w-4 h-4" />
-                <span>Mboka Affiliate Program</span>
-              </div>
-              <span className="text-xs font-mono font-bold text-amber-800">
-                Code: {user.referralCode}
-              </span>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 font-heading mt-3">
-              Earn KSh 150 + 5% Per Friend
-            </h3>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Invite contacts to transact on Mboka. Earn instant rewards when they register and recurring commissions on utility sales.
+            <h2 className="text-base font-bold text-slate-900 font-heading flex items-center gap-2">
+              <Headphones className="w-4 h-4 text-emerald-600" />
+              <span>Mboka Help Desk &amp; Official Contact</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Need assistance with deposits, B2C payouts, or account setup? Contact our Nairobi operations team 24/7.
             </p>
           </div>
-
-          <div className="flex items-center justify-between pt-4 mt-4 border-t border-amber-200/60">
-            <div>
-              <span className="text-[11px] text-slate-500 block">Available Rewards</span>
-              <strong className="text-amber-900 font-extrabold text-base font-mono">
-                {formatKsh(affiliateBalance)}
-              </strong>
-            </div>
-            <button
-              onClick={() => setActiveTab('affiliate')}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs"
-            >
-              Referral Dashboard
-            </button>
-          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Support Online</span>
+          </span>
         </div>
 
-        {/* Blogging Monetization Card */}
-        <div className="bg-gradient-to-br from-emerald-500/10 via-teal-50/40 to-white p-5 sm:p-6 rounded-2xl border border-emerald-200/80 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <div className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-900 bg-teal-100 px-2.5 py-1 rounded-lg">
-                <PenTool className="w-4 h-4" />
-                <span>Mboka Creator Blogging</span>
-              </div>
-              <span className="text-[11px] font-bold text-teal-800 bg-teal-200/60 px-2 py-0.5 rounded-md">
-                70% Ad Split
-              </span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {/* WhatsApp Direct */}
+          <a
+            href="https://wa.me/254796282073?text=Hello%20Mboka%20Support,%20I%20need%20assistance"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 hover:bg-emerald-100/60 transition-colors flex items-start gap-3 text-left group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Phone className="w-4 h-4" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 font-heading mt-3">
-              Write Articles & Monetize Traffic
-            </h3>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Share knowledge on business, hustle, tech, or farming. Earn ad revenue from eligible reads and impressions.
-            </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-900">WhatsApp Support</span>
+                <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-emerald-700" />
+              </div>
+              <p className="text-xs font-mono font-bold text-emerald-800 mt-0.5">+254 796 282 073</p>
+              <span className="text-[11px] text-emerald-700 block mt-1">Instant reply within 2 mins</span>
+            </div>
+          </a>
+
+          {/* Direct Phone Call */}
+          <a
+            href="tel:+254796282073"
+            className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 hover:bg-slate-100/70 transition-colors flex items-start gap-3 text-left group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Phone className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-900">Call Operations Desk</span>
+                <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-slate-800" />
+              </div>
+              <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">+254 796 282 073</p>
+              <span className="text-[11px] text-slate-500 block mt-1">Available 24/7 toll line</span>
+            </div>
+          </a>
+
+          {/* Email Support */}
+          <a
+            href="mailto:support@mboka.co.ke?subject=Mboka%20Support%20Inquiry"
+            className="p-4 rounded-xl bg-teal-50/60 border border-teal-200/80 hover:bg-teal-100/60 transition-colors flex items-start gap-3 text-left group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Mail className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-900">Email Inquiries</span>
+                <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-teal-700" />
+              </div>
+              <p className="text-xs font-mono font-bold text-teal-900 mt-0.5">support@mboka.co.ke</p>
+              <span className="text-[11px] text-teal-700 block mt-1">Official ticket resolution</span>
+            </div>
+          </a>
+        </div>
+
+        {/* Office & Live Chat Footer */}
+        <div className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>
+              <strong>HQ Address:</strong> Westlands Commercial Center, 4th Flr, Nairobi, Kenya
+            </span>
           </div>
 
-          <div className="flex items-center justify-between pt-4 mt-4 border-t border-teal-200/60">
-            <div>
-              <span className="text-[11px] text-slate-500 block">Creator Earnings</span>
-              <strong className="text-teal-900 font-extrabold text-base font-mono">
-                {formatKsh(blogBalance)}
-              </strong>
-            </div>
-            <button
-              onClick={() => setActiveTab('blog')}
-              className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs transition-colors shadow-xs"
-            >
-              Creator Studio
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab('chat')}
+            className="inline-flex items-center gap-1.5 font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer self-start sm:self-auto"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Open In-App Live Support Chat →</span>
+          </button>
         </div>
       </div>
 
-      {/* 4. Community Pulse & Recent Ledger Transactions */}
+      {/* 5. Recent Transactions Preview & Community Split */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Ledger Transactions */}
-        <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
+        {/* Recent Activity (2 cols) */}
+        <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-slate-900 font-heading">Recent Transactions</h2>
-              <p className="text-xs text-slate-500">Live ledger records across all Mboka modules</p>
+              <h2 className="text-base font-bold text-slate-900 font-heading">
+                Recent Activity
+              </h2>
+              <p className="text-xs text-slate-500">Latest wallet debits and credits</p>
             </div>
             <button
               onClick={() => setActiveTab('wallet')}
-              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1"
+              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
             >
-              <span>Full Ledger</span>
+              <span>View Full Ledger</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="divide-y divide-slate-100">
-            {recentTxs.map((tx) => (
-              <div
-                key={tx.id}
-                onClick={() => openReceiptFromTx(tx)}
-                className="py-3 flex items-center justify-between hover:bg-slate-50 px-2 rounded-xl transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                      tx.type === 'deposit' || tx.type === 'affiliate_payout' || tx.type === 'blog_payout'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : tx.type === 'pos_purchase'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {tx.type === 'deposit' || tx.type === 'affiliate_payout' || tx.type === 'blog_payout' ? (
-                      <ArrowDownLeft className="w-4 h-4" />
-                    ) : tx.type === 'pos_purchase' ? (
-                      <Receipt className="w-4 h-4" />
-                    ) : (
-                      <ArrowUpRight className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 line-clamp-1">{tx.title}</p>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                      <span>{tx.date}</span>
-                      <span>•</span>
-                      <span className="font-mono text-slate-500">{tx.reference}</span>
+            {recentTxs.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No transactions yet. Deposit or top up to get started.
+              </div>
+            ) : (
+              recentTxs.map((tx) => (
+                <div
+                  key={tx.id}
+                  onClick={() => openReceiptFromTx(tx)}
+                  className="py-3 flex items-center justify-between hover:bg-slate-50/80 px-2 rounded-xl transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        tx.type === 'deposit'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : tx.type === 'withdrawal'
+                          ? 'bg-rose-100 text-rose-700'
+                          : tx.type === 'pos_purchase'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-teal-100 text-teal-700'
+                      }`}
+                    >
+                      {tx.type === 'deposit' ? (
+                        <ArrowDownLeft className="w-4 h-4" />
+                      ) : tx.type === 'withdrawal' ? (
+                        <ArrowUpRight className="w-4 h-4" />
+                      ) : tx.type === 'pos_purchase' ? (
+                        <Receipt className="w-4 h-4" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 line-clamp-1">
+                        {tx.title}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
+                        <span>{tx.date}</span>
+                        <span>•</span>
+                        <span className="font-mono text-slate-600">{tx.reference}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="text-right">
-                  <span
-                    className={`text-sm font-extrabold font-mono ${
-                      tx.type === 'deposit' || tx.type === 'affiliate_payout' || tx.type === 'blog_payout'
-                        ? 'text-emerald-600'
-                        : 'text-slate-900'
-                    }`}
-                  >
-                    {tx.type === 'deposit' || tx.type === 'affiliate_payout' || tx.type === 'blog_payout'
-                      ? `+${formatKsh(tx.amount)}`
-                      : `-${formatKsh(tx.amount)}`}
-                  </span>
-                  {tx.metadata?.token && (
-                    <span className="block text-[10px] text-amber-700 font-medium">View Token</span>
-                  )}
+                  <div className="text-right">
+                    <span
+                      className={`text-xs font-extrabold font-mono ${
+                        tx.type === 'deposit' ? 'text-emerald-600' : 'text-slate-900'
+                      }`}
+                    >
+                      {tx.type === 'deposit'
+                        ? `+${formatKsh(tx.amount)}`
+                        : `-${formatKsh(tx.amount)}`}
+                    </span>
+                    <span className="block text-[10px] text-slate-400 group-hover:text-emerald-600 font-medium">
+                      Receipt →
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        {/* Community & Chat Highlight */}
+        {/* Guilds & Support Chat Room (1 col) */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900 font-heading">Mboka Chat & Guilds</h3>
-                <p className="text-xs text-slate-500">Connect with fellow hustlers & agents</p>
+                <h3 className="text-base font-bold text-slate-900 font-heading">
+                  Community Guilds
+                </h3>
+                <p className="text-xs text-slate-500">Network with active merchants</p>
               </div>
               <button
                 onClick={() => setActiveTab('chat')}
-                className="text-xs font-bold text-emerald-600 hover:text-emerald-700"
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
               >
                 Join Chat
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div
                 onClick={() => setActiveTab('chat')}
-                className="p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/40 border border-slate-100 transition-colors cursor-pointer"
+                className="p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-100 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <strong className="text-xs text-slate-900">Nairobi Hustlers & Tech Guild</strong>
+                  <strong className="text-xs text-slate-900">Nairobi Hustlers &amp; Tech</strong>
                 </div>
-                <p className="text-xs text-slate-600 line-clamp-2">
+                <p className="text-xs text-slate-600 line-clamp-1">
                   Evans: Stima tokens just bought via Mboka arrived in 2 secs!
                 </p>
                 <span className="text-[10px] text-slate-400 mt-1 block">842 active members</span>
@@ -421,16 +482,16 @@ export const HomeView: React.FC = () => {
 
               <div
                 onClick={() => setActiveTab('chat')}
-                className="p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/40 border border-slate-100 transition-colors cursor-pointer"
+                className="p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-100 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500" />
-                  <strong className="text-xs text-slate-900">Mboka Official Support 24/7</strong>
+                  <strong className="text-xs text-slate-900">Mboka Official Support Desk</strong>
                 </div>
-                <p className="text-xs text-slate-600 line-clamp-2">
-                  Agent Brenda: Your KYC verification has been approved.
+                <p className="text-xs text-slate-600 line-clamp-1">
+                  Agent Brenda: All B2C disbursements are instant 24/7.
                 </p>
-                <span className="text-[10px] text-slate-400 mt-1 block">Instant reply</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">Always active</span>
               </div>
             </div>
           </div>
@@ -441,7 +502,7 @@ export const HomeView: React.FC = () => {
               className="w-full py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <MessageSquare className="w-4 h-4 text-emerald-600" />
-              <span>Open Mboka Chat</span>
+              <span>Launch Live Support Chat</span>
             </button>
           </div>
         </div>
@@ -449,8 +510,14 @@ export const HomeView: React.FC = () => {
 
       {/* Modals */}
       {showDeposit && <DepositModal onClose={() => setShowDeposit(false)} />}
-      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} />}
+      {showWithdraw && (
+        <WithdrawModal
+          onClose={() => setShowWithdraw(false)}
+          onSwitchToDeposit={() => setShowDeposit(true)}
+        />
+      )}
       {showSendMoney && <SendMoneyModal onClose={() => setShowSendMoney(false)} />}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 };

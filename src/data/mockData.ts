@@ -318,7 +318,7 @@ export const initialConversations: ChatConversation[] = [
       {
         id: 'util1',
         senderId: 'sys_admin',
-        senderName: 'Mboka Bot',
+        senderName: 'Mboka Desk',
         senderAvatar: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=150&auto=format&fit=crop&q=80',
         text: 'System alert: Kenya Power prepaid server response time is normal (< 3 seconds).',
         timestamp: 'Sep 17 8:00 AM',

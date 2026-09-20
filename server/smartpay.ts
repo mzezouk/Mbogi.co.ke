@@ -36,6 +36,23 @@ interface WebhookTxn {
 
 const recentWebhooks: Map<string, WebhookTxn> = new Map();
 
+// SSE (Server-Sent Events) subscribers per checkoutRequestId for instant real-time webhook push
+const sseSubscribers: Map<string, Set<Response>> = new Map();
+
+export function notifySubscribers(checkoutRequestId: string, payload: any) {
+  const subscribers = sseSubscribers.get(checkoutRequestId);
+  if (subscribers && subscribers.size > 0) {
+    const dataString = `data: ${JSON.stringify(payload)}\n\n`;
+    for (const client of subscribers) {
+      try {
+        client.write(dataString);
+      } catch (err) {
+        subscribers.delete(client);
+      }
+    }
+  }
+}
+
 // Lazy Supabase helper for server-side recording
 function getServerSupabase() {
   const url = process.env.VITE_SUPABASE_URL;
@@ -223,19 +240,33 @@ smartpayRouter.post('/c2b/stk-push', async (req: Request, res: Response) => {
     const simulatedCheckoutId = `ws_CO_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
     const simulatedMerchantId = `MBK-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-    // Auto-schedule an instant simulation completion in the webhook cache
+    // Auto-schedule simulation completion only if not cancelled early
     setTimeout(() => {
-      recentWebhooks.set(simulatedCheckoutId, {
-        merchantRequestId: simulatedMerchantId,
-        checkoutRequestId: simulatedCheckoutId,
-        resultCode: 0,
-        resultDesc: 'The service request is processed successfully.',
-        amount: numAmount,
-        mpesaReceiptNumber: 'Q' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-        phoneNumber: formattedPhone,
-        timestamp: new Date().toISOString(),
-      });
-    }, 2500);
+      const existing = recentWebhooks.get(simulatedCheckoutId);
+      if (!existing) {
+        const receipt = 'Q' + Math.random().toString(36).substring(2, 10).toUpperCase();
+        const payload: WebhookTxn = {
+          merchantRequestId: simulatedMerchantId,
+          checkoutRequestId: simulatedCheckoutId,
+          resultCode: 0,
+          resultDesc: 'The service request is processed successfully.',
+          amount: numAmount,
+          mpesaReceiptNumber: receipt,
+          phoneNumber: formattedPhone,
+          timestamp: new Date().toISOString(),
+        };
+        recentWebhooks.set(simulatedCheckoutId, payload);
+        notifySubscribers(simulatedCheckoutId, {
+          status: 'COMPLETED',
+          resultCode: 0,
+          receipt,
+          amount: numAmount,
+          phone: formattedPhone,
+          message: 'The service request is processed successfully.',
+          checkoutRequestId: simulatedCheckoutId,
+        });
+      }
+    }, 4000);
 
     return res.status(200).json({
       success: true,
@@ -257,7 +288,155 @@ smartpayRouter.post('/c2b/stk-push', async (req: Request, res: Response) => {
 });
 
 /**
- * 3. C2B: Check STK Push Status
+ * 3. C2B: Real-time Server-Sent Events (SSE) Stream
+ * GET /api/smartpay/c2b/events/:checkoutRequestId
+ * Instantly broadcasts webhook arrival (Completed or Cancelled) to client without waiting for polling
+ */
+smartpayRouter.get('/c2b/events/:checkoutRequestId', (req: Request, res: Response) => {
+  const { checkoutRequestId } = req.params;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  if (!sseSubscribers.has(checkoutRequestId)) {
+    sseSubscribers.set(checkoutRequestId, new Set());
+  }
+  sseSubscribers.get(checkoutRequestId)!.add(res);
+
+  // Send current cached status immediately if already known
+  const cached = recentWebhooks.get(checkoutRequestId);
+  if (cached) {
+    const isCompleted = cached.resultCode === 0;
+    const isCancelled = cached.resultCode === 1032 || cached.resultDesc.toLowerCase().includes('cancel');
+    res.write(`data: ${JSON.stringify({
+      status: isCompleted ? 'COMPLETED' : isCancelled ? 'CANCELLED' : 'FAILED',
+      resultCode: cached.resultCode,
+      receipt: cached.mpesaReceiptNumber,
+      amount: cached.amount,
+      phone: cached.phoneNumber,
+      message: cached.resultDesc,
+      completedAt: cached.timestamp,
+      checkoutRequestId,
+    })}\n\n`);
+  } else {
+    res.write(`data: ${JSON.stringify({
+      status: 'PENDING',
+      message: 'Awaiting phone PIN authorization',
+      checkoutRequestId,
+    })}\n\n`);
+  }
+
+  req.on('close', () => {
+    const set = sseSubscribers.get(checkoutRequestId);
+    if (set) {
+      set.delete(res);
+      if (set.size === 0) sseSubscribers.delete(checkoutRequestId);
+    }
+  });
+});
+
+/**
+ * 4. C2B: Cancel an In-Flight Deposit / Request Cancelled Event
+ * POST /api/smartpay/c2b/cancel
+ */
+smartpayRouter.post('/c2b/cancel', (req: Request, res: Response) => {
+  const { checkoutRequestId, reason, phone, amount } = req.body;
+  if (!checkoutRequestId) {
+    return res.status(400).json({ success: false, message: 'checkoutRequestId is required' });
+  }
+
+  const cancelReason = reason || 'Request cancelled by user on phone';
+  const existing = recentWebhooks.get(checkoutRequestId);
+
+  const payload: WebhookTxn = {
+    merchantRequestId: existing?.merchantRequestId || `MR_${Date.now()}`,
+    checkoutRequestId,
+    resultCode: 1032, // Safaricom standard code for user cancelled
+    resultDesc: cancelReason,
+    amount: Number(amount) || existing?.amount || 0,
+    mpesaReceiptNumber: '',
+    phoneNumber: phone || existing?.phoneNumber || '',
+    timestamp: new Date().toISOString(),
+  };
+
+  recentWebhooks.set(checkoutRequestId, payload);
+
+  // Broadcast cancellation to user end immediately
+  notifySubscribers(checkoutRequestId, {
+    status: 'CANCELLED',
+    resultCode: 1032,
+    message: cancelReason,
+    amount: payload.amount,
+    phone: payload.phoneNumber,
+    checkoutRequestId,
+  });
+
+  return res.json({
+    success: true,
+    status: 'CANCELLED',
+    resultCode: 1032,
+    message: cancelReason,
+    checkoutRequestId,
+  });
+});
+
+/**
+ * 5. C2B: Test Helper to Simulate Webhook Event (Completed or Cancelled)
+ * POST /api/smartpay/c2b/simulate-event
+ */
+smartpayRouter.post('/c2b/simulate-event', (req: Request, res: Response) => {
+  const { checkoutRequestId, eventType, amount, phone, reason, receipt } = req.body;
+  if (!checkoutRequestId) {
+    return res.status(400).json({ success: false, message: 'checkoutRequestId is required' });
+  }
+
+  const isCancelled = eventType === 'cancel' || eventType === 'cancelled';
+  const resultCode = isCancelled ? 1032 : 0;
+  const resultDesc = isCancelled
+    ? (reason || 'Request cancelled by user on phone')
+    : 'The service request is processed successfully.';
+  const mpesaReceipt = isCancelled ? '' : (receipt || 'Q' + Math.random().toString(36).substring(2, 10).toUpperCase());
+
+  const payload: WebhookTxn = {
+    merchantRequestId: `MR_${Date.now()}`,
+    checkoutRequestId,
+    resultCode,
+    resultDesc,
+    amount: Number(amount) || 0,
+    mpesaReceiptNumber: mpesaReceipt,
+    phoneNumber: phone || '',
+    timestamp: new Date().toISOString(),
+  };
+
+  recentWebhooks.set(checkoutRequestId, payload);
+
+  notifySubscribers(checkoutRequestId, {
+    status: isCancelled ? 'CANCELLED' : 'COMPLETED',
+    resultCode,
+    receipt: mpesaReceipt,
+    amount: payload.amount,
+    phone: payload.phoneNumber,
+    message: resultDesc,
+    checkoutRequestId,
+  });
+
+  return res.json({
+    success: true,
+    status: isCancelled ? 'CANCELLED' : 'COMPLETED',
+    resultCode,
+    message: resultDesc,
+    receipt: mpesaReceipt,
+    checkoutRequestId,
+  });
+});
+
+/**
+ * 6. C2B: Check STK Push Status (Polling Fallback)
  * GET /api/smartpay/c2b/status/:checkoutRequestId
  */
 smartpayRouter.get('/c2b/status/:checkoutRequestId', async (req: Request, res: Response) => {
@@ -269,14 +448,18 @@ smartpayRouter.get('/c2b/status/:checkoutRequestId', async (req: Request, res: R
     // Check webhook cache first
     const cached = recentWebhooks.get(checkoutRequestId);
     if (cached) {
+      const isCompleted = cached.resultCode === 0;
+      const isCancelled = cached.resultCode === 1032 || cached.resultDesc.toLowerCase().includes('cancel');
       return res.json({
         success: true,
-        status: cached.resultCode === 0 ? 'COMPLETED' : 'FAILED',
+        status: isCompleted ? 'COMPLETED' : isCancelled ? 'CANCELLED' : 'FAILED',
+        resultCode: cached.resultCode,
         receipt: cached.mpesaReceiptNumber,
         amount: cached.amount,
         phone: cached.phoneNumber,
         message: cached.resultDesc,
         completedAt: cached.timestamp,
+        checkoutRequestId,
       });
     }
 
@@ -296,20 +479,25 @@ smartpayRouter.get('/c2b/status/:checkoutRequestId', async (req: Request, res: R
           const txStatus = String(tx.status || '').toLowerCase();
           const hasReceipt = Boolean(tx.mpesa_receipt_number && tx.mpesa_receipt_number.length > 3);
           const isCompleted = txStatus === 'completed' || txStatus === 'successful' || txStatus === 'success' || tx.result_code === 0 || hasReceipt;
-          const isFailed = txStatus === 'failed' || txStatus === 'cancelled' || (typeof tx.result_code === 'number' && tx.result_code !== 0);
+          const isCancelled = txStatus === 'cancelled' || tx.result_code === 1032 || String(tx.result_desc || '').toLowerCase().includes('cancel');
+          const isFailed = !isCancelled && (txStatus === 'failed' || (typeof tx.result_code === 'number' && tx.result_code !== 0));
 
           return res.json({
             success: true,
-            status: isCompleted ? 'COMPLETED' : isFailed ? 'FAILED' : 'PENDING',
+            status: isCompleted ? 'COMPLETED' : isCancelled ? 'CANCELLED' : isFailed ? 'FAILED' : 'PENDING',
+            resultCode: tx.result_code,
             receipt: tx.mpesa_receipt_number || tx.receipt || '',
             amount: tx.amount,
             phone: tx.phone,
             message: isCompleted
               ? `Payment confirmed! M-Pesa Receipt: ${tx.mpesa_receipt_number || 'OK'}`
+              : isCancelled
+              ? `Deposit was cancelled on phone: ${tx.result_desc || 'Request cancelled by user'}`
               : isFailed
-              ? `Payment cancelled or failed: ${tx.result_desc || 'Declined on handset'}`
+              ? `Payment failed: ${tx.result_desc || 'Declined on handset'}`
               : 'Awaiting customer M-Pesa PIN confirmation on handset...',
             raw: data,
+            checkoutRequestId,
           });
         }
       } catch (fetchErr) {
@@ -488,16 +676,30 @@ smartpayRouter.post('/webhook', async (req: Request, res: Response) => {
       }
 
       if (checkoutReqId) {
+        const isCompleted = Number(resultCode) === 0;
+        const isCancelled = Number(resultCode) === 1032 || String(resultDesc).toLowerCase().includes('cancel');
+
         recentWebhooks.set(checkoutReqId, {
           merchantRequestId: merchantReqId,
           checkoutRequestId: checkoutReqId,
           resultCode: Number(resultCode),
           resultDesc,
           amount,
-          mpesaReceiptNumber: receipt || 'MPESA_WEBHOOK',
+          mpesaReceiptNumber: receipt || (isCompleted ? 'MPESA_WEBHOOK' : ''),
           phoneNumber: phone,
           timestamp: new Date().toISOString(),
           raw,
+        });
+
+        // Broadcast to user end immediately via SSE
+        notifySubscribers(checkoutReqId, {
+          status: isCompleted ? 'COMPLETED' : isCancelled ? 'CANCELLED' : 'FAILED',
+          resultCode: Number(resultCode),
+          receipt,
+          amount,
+          phone,
+          message: resultDesc,
+          checkoutRequestId: checkoutReqId,
         });
 
         // Sync to Supabase if configured
@@ -519,7 +721,7 @@ smartpayRouter.post('/webhook', async (req: Request, res: Response) => {
               created_at: new Date().toISOString(),
             });
 
-            if (resultCode === 0 && amount > 0) {
+            if (isCompleted && amount > 0) {
               await supabase.from('mboka_transactions').insert({
                 id: `tx_${checkoutReqId}`,
                 reference: receipt || `SP-${checkoutReqId.substring(0, 10)}`,
@@ -528,6 +730,18 @@ smartpayRouter.post('/webhook', async (req: Request, res: Response) => {
                 fee: 0,
                 description: `M-Pesa Deposit via SmartPay (${receipt || checkoutReqId})`,
                 status: 'completed',
+                recipient_or_sender: phone,
+                created_at: new Date().toISOString(),
+              });
+            } else if (isCancelled || Number(resultCode) !== 0) {
+              await supabase.from('mboka_transactions').insert({
+                id: `tx_${checkoutReqId}_fail`,
+                reference: `CANCEL-${checkoutReqId.substring(0, 8).toUpperCase()}`,
+                type: 'deposit',
+                amount,
+                fee: 0,
+                description: `M-Pesa Deposit Cancelled (${resultDesc})`,
+                status: 'failed',
                 recipient_or_sender: phone,
                 created_at: new Date().toISOString(),
               });

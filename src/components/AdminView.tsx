@@ -11,7 +11,7 @@ import {
   TrendingUp,
   Radio,
   Sliders,
-  Sparkles,
+  Wrench,
   Server,
   Send,
   Lock,
@@ -528,7 +528,7 @@ export const AdminView: React.FC = () => {
                   disabled={isInstallingDb}
                   className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-60"
                 >
-                  <Sparkles className={`w-3.5 h-3.5 text-emerald-400 ${isInstallingDb ? 'animate-spin' : ''}`} />
+                  <Wrench className={`w-3.5 h-3.5 text-emerald-400 ${isInstallingDb ? 'animate-spin' : ''}`} />
                   <span>{isInstallingDb ? 'Installing & Verifying...' : 'Install & Verify DB'}</span>
                 </button>
 
@@ -938,7 +938,7 @@ CREATE TABLE IF NOT EXISTS mboka_invited_users ( ... );`}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
                   <span className="flex items-center gap-1 text-emerald-700">
-                    <Sparkles className="w-3 h-3" />
+                    <Server className="w-3 h-3" />
                     Supabase Edge Function:
                   </span>
                   <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-mono">

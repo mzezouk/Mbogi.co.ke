@@ -5,7 +5,6 @@ import {
   Heart,
   MessageSquare,
   Share2,
-  Sparkles,
   TrendingUp,
   DollarSign,
   Plus,
@@ -108,7 +107,7 @@ export const BlogView: React.FC = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-1.5 bg-white/10 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full backdrop-blur-xs">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-300" />
               <span>Mboka Content Monetization Engine</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black font-heading tracking-tight">

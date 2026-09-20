@@ -119,6 +119,7 @@ Deno.serve(async (req: Request) => {
       eventType = payload.event || (payload.b2c ? 'b2c.payout' : 'c2b.deposit');
     }
 
+    const isCancelled = resultCode === 1032 || resultDesc.toLowerCase().includes('cancel');
     const isSuccess = resultCode === 0;
     const eventId = `evt_${checkoutRequestId || Date.now()}_${Math.random()
       .toString(36)
@@ -128,7 +129,7 @@ Deno.serve(async (req: Request) => {
     try {
       await supabase.from('mboka_smartpay_events').insert({
         id: eventId,
-        event_type: eventType,
+        event_type: isCancelled ? 'c2b.cancelled' : eventType,
         checkout_request_id: checkoutRequestId,
         merchant_request_id: merchantRequestId,
         mpesa_receipt: mpesaReceipt,
@@ -144,14 +145,16 @@ Deno.serve(async (req: Request) => {
       console.warn('Notice recording event to mboka_smartpay_events:', e?.message);
     }
 
-    // 2. If successful, record in mboka_transactions and reconcile wallet
-    if (isSuccess && amount > 0) {
-      const txId = `tx_${checkoutRequestId || Date.now()}`;
-      const reference =
-        mpesaReceipt ||
-        `SP-${(checkoutRequestId || '').substring(0, 10).toUpperCase() || Date.now()}`;
+    // 2. Automated status updates for both completed and cancelled deposits
+    const txId = `tx_${checkoutRequestId || Date.now()}`;
+    const reference =
+      mpesaReceipt ||
+      (isCancelled
+        ? `CANCEL-${(checkoutRequestId || '').substring(0, 10).toUpperCase() || Date.now()}`
+        : `SP-${(checkoutRequestId || '').substring(0, 10).toUpperCase() || Date.now()}`);
 
-      try {
+    try {
+      if (isSuccess && amount > 0) {
         // Idempotency check: don't double insert if already recorded
         const { data: existing } = await supabase
           .from('mboka_transactions')
@@ -174,11 +177,41 @@ Deno.serve(async (req: Request) => {
             created_at: new Date().toISOString(),
           });
 
-          console.log(`Reconciled transaction ${reference} in Supabase mboka_transactions.`);
+          console.log(`Reconciled completed transaction ${reference} in Supabase mboka_transactions.`);
         }
-      } catch (err: any) {
-        console.warn('Notice inserting mboka_transaction:', err?.message);
+      } else if (isCancelled || (typeof resultCode === 'number' && resultCode !== 0)) {
+        // Automatically record / update cancellation to user's end
+        const { data: existing } = await supabase
+          .from('mboka_transactions')
+          .select('id')
+          .eq('id', txId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('mboka_transactions')
+            .update({
+              status: 'failed',
+              description: `SmartPay M-Pesa Deposit Cancelled: ${resultDesc || 'Cancelled on handset'}`,
+            })
+            .eq('id', txId);
+        } else {
+          await supabase.from('mboka_transactions').insert({
+            id: txId,
+            reference,
+            type: 'deposit',
+            amount,
+            fee: 0,
+            description: `SmartPay M-Pesa Deposit Cancelled: ${resultDesc || 'Cancelled on handset'}`,
+            status: 'failed',
+            recipient_or_sender: phoneNumber,
+            created_at: new Date().toISOString(),
+          });
+        }
+        console.log(`Updated cancelled deposit ${txId} (${resultDesc}) in Supabase mboka_transactions.`);
       }
+    } catch (err: any) {
+      console.warn('Notice updating mboka_transactions from webhook:', err?.message);
     }
 
     // Return standard Safaricom / SmartPay acknowledgment JSON

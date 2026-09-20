@@ -22,7 +22,7 @@ import {
   Users,
   PenTool,
   Store,
-  Sparkles,
+  Headphones,
   MessageSquare,
   Shield,
 } from 'lucide-react';
@@ -72,17 +72,17 @@ const MainContent: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Mboka AI Copilot Button (desktop & mobile) */}
+      {/* Floating Support Desk Button (desktop & mobile) */}
       {!isAiCopilotOpen && (
         <button
           onClick={() => setIsAiCopilotOpen(true)}
-          className="fixed bottom-20 sm:bottom-8 right-5 z-40 flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold text-xs group border border-emerald-400/40"
-          aria-label="Open Mboka AI Assistant"
+          className="fixed bottom-20 sm:bottom-8 right-5 z-40 flex items-center gap-2.5 px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold text-xs group border border-slate-700/80"
+          aria-label="Open Mboka Support Desk"
         >
-          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-200 group-hover:rotate-12 transition-transform" />
+          <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <Headphones className="w-3.5 h-3.5" />
           </div>
-          <span className="tracking-wide">Ask Mboka AI</span>
+          <span className="tracking-wide">Help &amp; Support</span>
         </button>
       )}
 

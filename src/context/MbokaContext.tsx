@@ -78,6 +78,15 @@ interface MbokaContextType {
     message: string;
     receipt: string;
   }>;
+  recordCancelledDeposit: (
+    checkoutId: string,
+    phone: string,
+    amount: number,
+    reason?: string
+  ) => Promise<{
+    success: boolean;
+    message: string;
+  }>;
   initiateSmartPayWithdrawal: (phone: string, amount: number, pin: string) => Promise<{
     success: boolean;
     message: string;
@@ -109,6 +118,7 @@ interface MbokaContextType {
   };
   addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => void;
   updateUserProfile: (updates: Partial<UserProfile & { walletPin?: string }>) => void;
+  registerUser: (userData: { name: string; phone: string; email?: string; pin: string }) => UserProfile;
   resetAllData: () => void;
 }
 
@@ -412,19 +422,79 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   };
 
+  // Record an automatically cancelled deposit to the user's ledger and alert center without manual intervention
+  const recordCancelledDeposit = async (
+    checkoutId: string,
+    phone: string,
+    amount: number,
+    reason?: string
+  ) => {
+    const cancelReason = reason || 'Cancelled on handset by customer';
+    const txId = `tx_${checkoutId || Date.now()}_cancel`;
+    const ref = `CANCEL-${(checkoutId || '').substring(0, 8).toUpperCase() || Date.now()}`;
+
+    setTransactions((prev) => {
+      // Avoid duplicate cancelled records for the same checkoutId
+      if (prev.some((t) => t.id === txId || (t.notes && t.notes.includes(checkoutId) && t.status === 'failed'))) {
+        return prev;
+      }
+      const cancelTx: WalletTransaction = {
+        id: txId,
+        type: 'deposit',
+        title: 'M-Pesa Deposit (Cancelled)',
+        category: 'wallet',
+        amount,
+        fee: 0,
+        date: 'Just now',
+        reference: ref,
+        status: 'failed',
+        recipientOrSender: phone,
+        notes: `SmartPay STK Push cancelled: ${cancelReason} (Ref: ${checkoutId})`,
+      };
+
+      supabaseService.recordTransaction(cancelTx).catch((e) => console.warn('Supabase recordTx:', e));
+
+      return [cancelTx, ...prev];
+    });
+
+    const newNotif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'M-Pesa Deposit Cancelled',
+      message: `Your deposit of ${formatKsh(amount)} was cancelled: ${cancelReason}`,
+      type: 'wallet',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'wallet',
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+
+    return {
+      success: true,
+      message: `Deposit of ${formatKsh(amount)} cancelled: ${cancelReason}`,
+    };
+  };
+
   // 2. Withdraw funds
   const withdrawFunds = async (amount: number, phone: string, pin: string) => {
-    if (pin !== user.pin) {
-      return { success: false, message: 'Invalid 4-digit security PIN. Please try again.' };
+    const activePin = user.walletPin || user.pin || '1234';
+    if (pin !== activePin) {
+      return { success: false, message: 'Invalid 4-digit security PIN. Please check or reset your PIN.' };
+    }
+    if (walletBalance < 10) {
+      return { success: false, message: `Minimum balance required to withdraw is KSh 10. Current balance: ${formatKsh(walletBalance)}.` };
+    }
+    if (amount < 10) {
+      return { success: false, message: 'Minimum withdrawal amount is KSh 10.' };
     }
     if (amount > walletBalance) {
       return { success: false, message: 'Insufficient wallet balance for withdrawal.' };
     }
 
-    const fee = amount > 1000 ? 15 : 5;
+    // Requested B2C fee rule: 10-100 is FREE | 101-15000 to be discussed in future (currently 0 fee)
+    const fee = 0;
     const totalDeduction = amount + fee;
     if (totalDeduction > walletBalance) {
-      return { success: false, message: `Insufficient balance to cover withdrawal + KSh ${fee} fee.` };
+      return { success: false, message: `Insufficient balance to cover withdrawal of ${formatKsh(amount)}.` };
     }
 
     const ref = `WDL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -464,20 +534,23 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 2b. SmartPayPesa B2C Payout / Disbursement
   const initiateSmartPayWithdrawal = async (phone: string, amount: number, pin: string) => {
-    if (pin !== user.pin) {
-      return { success: false, message: 'Invalid 4-digit security PIN. Please try again.' };
+    const activePin = user.walletPin || user.pin || '1234';
+    if (pin !== activePin) {
+      return { success: false, message: 'Invalid 4-digit withdrawal PIN. Please check or set your PIN.' };
+    }
+    if (walletBalance < 10) {
+      return { success: false, message: `You need a minimum balance of KSh 10 to withdraw via B2C. Current balance: ${formatKsh(walletBalance)}.` };
     }
     if (amount < 10) {
-      return { success: false, message: 'Minimum withdrawal via SmartPay is KSh 10.' };
+      return { success: false, message: 'Minimum withdrawal via SmartPay B2C is KSh 10.' };
     }
 
-    // Official SmartPay B2C transfer fee schedule:
-    // KSh 10–100: Free | KSh 101–1,000: KSh 10 | >1,000: KSh 15
-    const fee = amount > 1000 ? 15 : amount > 100 ? 10 : 0;
+    // Requested B2C fee rule: 10-100 is FREE | 101-15000 to be discussed in future (currently 0 fee)
+    const fee = 0;
     const totalDeduction = amount + fee;
 
     if (totalDeduction > walletBalance) {
-      return { success: false, message: `Insufficient balance to cover withdrawal + KSh ${fee} transfer fee.` };
+      return { success: false, message: `Insufficient balance to cover withdrawal of ${formatKsh(amount)}.` };
     }
 
     const res = await smartpayService.sendB2cPayout({ phone, amount });
@@ -848,10 +921,83 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateUserPin = (newPin: string) => {
     if (newPin.length === 4 && /^\d+$/.test(newPin)) {
-      setUser((prev) => ({ ...prev, pin: newPin }));
+      setUser((prev) => {
+        const updated = { ...prev, pin: newPin, walletPin: newPin };
+        localStorage.setItem('mboka_user', JSON.stringify(updated));
+        return updated;
+      });
       return true;
     }
     return false;
+  };
+
+  const registerUser = (userData: { name: string; phone: string; email?: string; pin: string }) => {
+    const cleanPhone = userData.phone.startsWith('+')
+      ? userData.phone
+      : userData.phone.startsWith('0')
+      ? '+254' + userData.phone.substring(1)
+      : '+254' + userData.phone;
+
+    const newUser: UserProfile = {
+      id: `usr_${Date.now().toString().slice(-6)}`,
+      name: userData.name,
+      username: userData.name.toLowerCase().replace(/\s+/g, '_') + '_' + Math.floor(Math.random() * 900 + 100),
+      phone: cleanPhone,
+      email: userData.email || `${userData.name.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      referralCode: `MBOKA-${Math.floor(Math.random() * 9000 + 1000)}`,
+      isKycVerified: true,
+      role: 'user',
+      joinedDate: 'Today',
+      pin: userData.pin,
+      walletPin: userData.pin,
+    };
+
+    // User signup requirement: Starting balance > 0 (e.g. KSh 20 welcome bonus credit)
+    const welcomeCredit = 20;
+    const welcomeTx: WalletTransaction = {
+      id: `tx_bonus_${Date.now()}`,
+      type: 'deposit',
+      title: 'Welcome Sign-up Bonus Credit',
+      category: 'wallet',
+      amount: welcomeCredit,
+      fee: 0,
+      date: 'Just now',
+      reference: `MBOKA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      status: 'completed',
+      recipientOrSender: 'Mboka Rewards Pool',
+      notes: 'Real onboarding credit (>0) ready for immediate testing and B2C withdrawal',
+    };
+
+    setUser(newUser);
+    setWalletBalance(welcomeCredit);
+    setAffiliateBalance(0);
+    setBlogBalance(0);
+    setPosFloatBalance(0);
+    setTransactions([welcomeTx]);
+
+    localStorage.setItem('mboka_user', JSON.stringify(newUser));
+    localStorage.setItem('mboka_balance', welcomeCredit.toString());
+    localStorage.setItem('mboka_affiliate_bal', '0');
+    localStorage.setItem('mboka_blog_bal', '0');
+    localStorage.setItem('mboka_pos_float', '0');
+    localStorage.setItem('mboka_transactions', JSON.stringify([welcomeTx]));
+
+    supabaseService.syncUserProfile(newUser).catch(() => {});
+    supabaseService.recordTransaction(welcomeTx).catch(() => {});
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'Account Activated!',
+      message: `Karibu ${newUser.name}! Your wallet has been credited with KSh ${welcomeCredit}.00 welcome bonus.`,
+      type: 'wallet',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'wallet',
+    };
+    setNotifications([notif]);
+
+    return newUser;
   };
 
   const toggleKycStatus = () => {
@@ -953,6 +1099,7 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         adminStats,
         addNotification,
         updateUserProfile,
+        registerUser,
         resetAllData,
         isSupabaseConfigured,
         isSupabaseConnected,
@@ -963,6 +1110,7 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         refreshSmartPayStatus,
         initiateSmartPayDeposit,
         confirmSmartPayDeposit,
+        recordCancelledDeposit,
         initiateSmartPayWithdrawal,
       }}
     >

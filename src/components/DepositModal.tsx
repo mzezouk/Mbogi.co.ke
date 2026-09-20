@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Smartphone,
@@ -6,81 +6,123 @@ import {
   CreditCard,
   Loader2,
   CheckCircle2,
+  XCircle,
   ArrowRight,
   ShieldCheck,
   RotateCw,
   Clock,
-  Sparkles,
-  Receipt,
+  Sliders,
   AlertCircle,
+  Radio,
 } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';
-import { smartpayService } from '../lib/smartpay';
+import { smartpayService, StkStatusResponse } from '../lib/smartpay';
 
 interface DepositModalProps {
   onClose: () => void;
 }
 
 export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
-  const { depositFunds, confirmSmartPayDeposit, user, formatKsh } = useMboka();
+  const { depositFunds, confirmSmartPayDeposit, recordCancelledDeposit, user, formatKsh } = useMboka();
   const [method, setMethod] = useState<'mpesa' | 'bank' | 'card'>('mpesa');
   const [amount, setAmount] = useState<string>('1000');
   const [phone, setPhone] = useState<string>(user.phone);
 
-  // STK Flow State Machine: 'input' | 'stk_prompt' | 'success'
-  const [step, setStep] = useState<'input' | 'stk_prompt' | 'success'>('input');
+  // STK Flow State Machine: 'input' | 'stk_prompt' | 'success' | 'cancelled'
+  const [step, setStep] = useState<'input' | 'stk_prompt' | 'success' | 'cancelled'>('input');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // STK Push Details
   const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
-  const [stkStatus, setStkStatus] = useState<'PENDING' | 'COMPLETED' | 'FAILED'>('PENDING');
+  const [stkStatus, setStkStatus] = useState<'PENDING' | 'COMPLETED' | 'CANCELLED' | 'FAILED'>('PENDING');
   const [stkMessage, setStkMessage] = useState<string>('');
   const [confirmedReceipt, setConfirmedReceipt] = useState<string>('');
+  const [cancelReason, setCancelReason] = useState<string>('');
   const [pollCountdown, setPollCountdown] = useState<number>(30);
-  const [showManualReceiptInput, setShowManualReceiptInput] = useState<boolean>(false);
-  const [manualReceipt, setManualReceipt] = useState<string>('');
+
+  const hasHandledFinalEvent = useRef<boolean>(false);
 
   const presetAmounts = [200, 500, 1000, 2500, 5000];
 
-  // Live polling effect when in 'stk_prompt' step
+  // Automated Webhook Listener & Polling (Zero manual confirmation required)
   useEffect(() => {
     let timer: NodeJS.Timeout;
     let pollInterval: NodeJS.Timeout;
+    let unsubscribeSSE: (() => void) | undefined;
 
     if (step === 'stk_prompt' && checkoutRequestId && stkStatus === 'PENDING') {
-      // Countdown timer
+      hasHandledFinalEvent.current = false;
+
+      const handleWebhookUpdate = async (res: StkStatusResponse) => {
+        if (hasHandledFinalEvent.current) return;
+
+        if (res.status === 'COMPLETED') {
+          hasHandledFinalEvent.current = true;
+          const receipt = res.receipt || `SP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+          setStkStatus('COMPLETED');
+          setConfirmedReceipt(receipt);
+          setStep('success');
+          await confirmSmartPayDeposit(checkoutRequestId, phone, Number(amount), receipt);
+          clearInterval(pollInterval);
+          clearInterval(timer);
+          if (unsubscribeSSE) unsubscribeSSE();
+        } else if (res.status === 'CANCELLED' || res.status === 'FAILED') {
+          hasHandledFinalEvent.current = true;
+          const reason =
+            res.message ||
+            (res.status === 'CANCELLED'
+              ? 'M-Pesa STK push was cancelled by customer on handset'
+              : 'Payment was declined or failed on the M-Pesa network');
+          setStkStatus('CANCELLED');
+          setCancelReason(reason);
+          setStep('cancelled');
+          await recordCancelledDeposit(checkoutRequestId, phone, Number(amount), reason);
+          clearInterval(pollInterval);
+          clearInterval(timer);
+          if (unsubscribeSSE) unsubscribeSSE();
+        } else if (res.message) {
+          setStkMessage(res.message);
+        }
+      };
+
+      // 1. Subscribe to instant Server-Sent Events (SSE) from the webhook receiver
+      unsubscribeSSE = smartpayService.subscribeStkEvents(checkoutRequestId, (event) => {
+        handleWebhookUpdate(event);
+      });
+
+      // 2. Countdown timer
       timer = setInterval(() => {
-        setPollCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+        setPollCountdown((prev) => {
+          if (prev <= 1) {
+            handleWebhookUpdate({
+              success: false,
+              status: 'CANCELLED',
+              message: 'STK prompt timed out awaiting M-Pesa PIN on handset.',
+            });
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
 
-      // Status check interval every 2.5s
+      // 3. Fallback polling check every 1.8s
       pollInterval = setInterval(async () => {
         try {
           const res = await smartpayService.checkStkStatus(checkoutRequestId);
-          if (res.status === 'COMPLETED') {
-            const receipt = res.receipt || `SP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-            setStkStatus('COMPLETED');
-            setConfirmedReceipt(receipt);
-            setStep('success');
-            await confirmSmartPayDeposit(checkoutRequestId, phone, Number(amount), receipt);
-            clearInterval(pollInterval);
-            clearInterval(timer);
-          } else if (res.status === 'FAILED') {
-            setStkStatus('FAILED');
-            setStkMessage(res.message || 'M-Pesa payment was declined or cancelled.');
-          }
+          handleWebhookUpdate(res);
         } catch {
-          // Continue polling
+          // Continue listening
         }
-      }, 2500);
+      }, 1800);
     }
 
     return () => {
       clearInterval(timer);
       clearInterval(pollInterval);
+      if (unsubscribeSSE) unsubscribeSSE();
     };
-  }, [step, checkoutRequestId, stkStatus, phone, amount, confirmSmartPayDeposit]);
+  }, [step, checkoutRequestId, stkStatus, phone, amount, confirmSmartPayDeposit, recordCancelledDeposit]);
 
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,25 +184,36 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
     }
   };
 
-  // Manual fast-confirm when user has entered PIN or testing
-  const handleFastConfirm = async () => {
+  // User explicitly cancels the active prompt
+  const handleCancelPrompt = async () => {
     setIsProcessing(true);
-    const numAmount = Number(amount);
-    const receipt =
-      manualReceipt.trim().toUpperCase() ||
-      confirmedReceipt ||
-      `SP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-    const res = await confirmSmartPayDeposit(checkoutRequestId, phone, numAmount, receipt);
+    hasHandledFinalEvent.current = true;
+    const reason = 'Deposit cancelled by user in Mboka app';
+    setStkStatus('CANCELLED');
+    setCancelReason(reason);
+    setStep('cancelled');
     setIsProcessing(false);
-    if (res.success) {
-      setConfirmedReceipt(receipt);
-      setStkStatus('COMPLETED');
-      setStep('success');
-      setTimeout(() => {
-        onClose();
-      }, 1800);
-    }
+
+    await smartpayService.cancelStkPush({
+      checkoutRequestId,
+      phone,
+      amount: Number(amount),
+      reason,
+    });
+    await recordCancelledDeposit(checkoutRequestId, phone, Number(amount), reason);
+  };
+
+  // Simulation test triggers for instant webhook verification
+  const handleSimulateWebhook = async (eventType: 'complete' | 'cancel') => {
+    setIsProcessing(true);
+    await smartpayService.simulateWebhookEvent({
+      checkoutRequestId,
+      eventType,
+      amount: Number(amount),
+      phone,
+      reason: eventType === 'cancel' ? 'User cancelled prompt on phone (ResultCode 1032)' : undefined,
+    });
+    setIsProcessing(false);
   };
 
   return (
@@ -174,14 +227,18 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
                 ? 'Deposit into Mboka Wallet'
                 : step === 'stk_prompt'
                 ? 'M-Pesa STK Prompt Active'
-                : 'Deposit Confirmed!'}
+                : step === 'success'
+                ? 'Deposit Confirmed!'
+                : 'Deposit Cancelled'}
             </h2>
             <p className="text-xs text-slate-500">
               {step === 'input'
                 ? 'Instant funding with zero platform deposit fees'
                 : step === 'stk_prompt'
                 ? 'Awaiting authorization on your phone'
-                : 'Funds credited to your central wallet balance'}
+                : step === 'success'
+                ? 'Funds credited to your central wallet balance'
+                : 'No funds were deducted from your phone or wallet'}
             </p>
           </div>
           <button
@@ -378,7 +435,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
           </form>
         )}
 
-        {/* STEP 2: STK Push Dispatched Screen */}
+        {/* STEP 2: STK Push Dispatched Screen - Live Webhook Driven */}
         {step === 'stk_prompt' && (
           <div className="p-6 space-y-5">
             {/* Visual Phone Card */}
@@ -399,10 +456,10 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
                 <span className="text-sm font-extrabold text-emerald-800">{formatKsh(Number(amount))}</span>
               </div>
 
-              {/* Live Polling Status Indicator */}
-              <div className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-emerald-700">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Listening for M-Pesa network confirmation... ({pollCountdown}s)</span>
+              {/* Live Webhook Status Indicator */}
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 py-2 px-3 rounded-xl border border-emerald-200/70">
+                <Radio className="w-3.5 h-3.5 text-emerald-600 animate-ping" />
+                <span>Listening for SmartPay Webhook Event... ({pollCountdown}s)</span>
               </div>
             </div>
 
@@ -416,60 +473,55 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
               </div>
             )}
 
-            {/* Fast-Action Confirmation Options */}
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={handleFastConfirm}
-                disabled={isProcessing}
-                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying & Crediting...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>I Have Authorized / Confirm Payment</span>
-                  </>
-                )}
-              </button>
+            {/* Zero Manual Confirmation Notice */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-1">
+              <p className="text-xs font-semibold text-slate-800">
+                Automatic Webhook Confirmation
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Enter your PIN or cancel on your phone. The webhook updates this screen and your ledger in real-time with no manual confirmation needed.
+              </p>
+            </div>
 
-              {/* Manual Receipt code toggle */}
-              {!showManualReceiptInput ? (
+            {/* Webhook Simulation Shortcuts (For instant sandbox verification) */}
+            <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2">
+              <p className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                Simulate Real-time Webhook Event:
+              </p>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowManualReceiptInput(true)}
-                  className="w-full py-2 text-xs text-slate-500 hover:text-slate-800 text-center font-medium transition-colors"
+                  onClick={() => handleSimulateWebhook('complete')}
+                  disabled={isProcessing}
+                  className="py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                 >
-                  Have an M-Pesa SMS Code? Enter receipt manually
+                  <CheckCircle2 className="w-3 h-3" />
+                  Simulate PIN Approved
                 </button>
-              ) : (
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <Receipt className="w-3.5 h-3.5 text-emerald-600" />
-                    M-Pesa SMS Confirmation Code
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={manualReceipt}
-                      onChange={(e) => setManualReceipt(e.target.value)}
-                      placeholder="e.g. QJH89XK294"
-                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleFastConfirm}
-                      className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
-                    >
-                      Reconcile
-                    </button>
-                  </div>
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => handleSimulateWebhook('cancel')}
+                  disabled={isProcessing}
+                  className="py-1.5 px-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <XCircle className="w-3 h-3" />
+                  Simulate Cancelled
+                </button>
+              </div>
+            </div>
+
+            {/* Cancel Action */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCancelPrompt}
+                disabled={isProcessing}
+                className="w-full py-2.5 px-4 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                Cancel Deposit Request
+              </button>
 
               <button
                 type="button"
@@ -492,7 +544,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
             <div>
               <h3 className="text-lg font-bold text-slate-900 font-heading">Deposit Successfully Credited!</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Your Mboka Central Ledger has been credited with zero fees.
+                Webhook event received and reconciled with zero manual intervention.
               </p>
             </div>
 
@@ -509,6 +561,10 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
                 <span className="text-slate-500">Phone:</span>
                 <span className="font-mono text-slate-700">{phone}</span>
               </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Reconciliation:</span>
+                <span className="text-emerald-700 font-semibold">Auto-Reconciled via Webhook</span>
+              </div>
             </div>
 
             <button
@@ -518,6 +574,64 @@ export const DepositModal: React.FC<DepositModalProps> = ({ onClose }) => {
             >
               Done & View Balance
             </button>
+          </div>
+        )}
+
+        {/* STEP 4: Cancelled Screen - Webhook Driven */}
+        {step === 'cancelled' && (
+          <div className="p-8 text-center space-y-4">
+            <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto ring-8 ring-rose-50 animate-in zoom-in-50 duration-300">
+              <XCircle className="w-10 h-10" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 font-heading">Deposit Cancelled</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                The transaction was cancelled and no funds were deducted from your M-Pesa account.
+              </p>
+            </div>
+
+            <div className="p-4 bg-rose-50/60 rounded-xl border border-rose-100 space-y-2 text-left">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Amount Attempted:</span>
+                <span className="font-bold text-slate-800">{formatKsh(Number(amount))}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Phone:</span>
+                <span className="font-mono text-slate-700">{phone}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Status:</span>
+                <span className="font-bold text-rose-700">Cancelled / Declined</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Reason:</span>
+                <span className="font-medium text-slate-700 max-w-[200px] text-right truncate" title={cancelReason}>
+                  {cancelReason || 'Customer cancelled on phone'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('input');
+                  setStkStatus('PENDING');
+                  setCancelReason('');
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Try Again
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
+              >
+                Return to Wallet
+              </button>
+            </div>
           </div>
         )}
       </div>
