@@ -102,7 +102,7 @@ export const AdminView: React.FC = () => {
       title: `[BROADCAST] ${broadcastTitle}`,
       message: broadcastMessage,
       type: 'system',
-      linkTab: 'home',
+      linkTab: 'wallet',
     });
 
     setBroadcastSent(true);
@@ -137,7 +137,7 @@ export const AdminView: React.FC = () => {
         <button
           onClick={() => {
             setIsAdminMode(false);
-            setActiveTab('home');
+            setActiveTab('wallet');
           }}
           className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-colors self-start md:self-auto cursor-pointer"
         >

@@ -12,6 +12,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Fingerprint,
 } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';
 
@@ -30,6 +31,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
     user,
     formatKsh,
     updateUserPin,
+    triggerBiometricAuth,
   } = useMboka();
 
   const [amount, setAmount] = useState<string>('50');
@@ -60,6 +62,72 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
 
   const activePin = user.walletPin || user.pin || '1234';
   const hasMinimumBalance = walletBalance >= 10;
+  const isBiometricEnabled = user.biometricSettings?.enabled !== false && user.biometricSettings?.requireForWithdrawals !== false;
+
+  const executeWithdrawal = async (pinToUse: string) => {
+    setIsProcessing(true);
+    setStatusMessage(null);
+
+    const res = await initiateSmartPayWithdrawal(phone, numAmount, pinToUse);
+    setIsProcessing(false);
+
+    if (res.success) {
+      setStatusMessage({ type: 'success', text: res.message });
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } else {
+      setStatusMessage({ type: 'error', text: res.message });
+    }
+  };
+
+  const handleBiometricWithdrawal = () => {
+    if (!hasMinimumBalance) {
+      setStatusMessage({
+        type: 'error',
+        text: `B2C withdrawals require a minimum balance of KSh 10. Your balance is ${formatKsh(
+          walletBalance
+        )}. Please deposit funds first.`,
+      });
+      return;
+    }
+
+    if (numAmount < 10) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Minimum withdrawal amount is KSh 10.',
+      });
+      return;
+    }
+
+    if (numAmount > 15000) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Maximum single B2C withdrawal limit is KSh 15,000.',
+      });
+      return;
+    }
+
+    if (totalDeduction > walletBalance) {
+      setStatusMessage({
+        type: 'error',
+        text: `Insufficient balance for KSh ${numAmount}. Your balance is ${formatKsh(
+          walletBalance
+        )}.`,
+      });
+      return;
+    }
+
+    triggerBiometricAuth({
+      actionTitle: 'Authorize M-Pesa B2C Withdrawal',
+      actionDescription: 'Native biometric authorization required before releasing funds.',
+      amountText: formatKsh(numAmount),
+      recipientText: phone,
+      onSuccess: () => {
+        executeWithdrawal(activePin);
+      },
+    });
+  };
 
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,10 +168,16 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
       return;
     }
 
+    // If biometric enabled and user clicks submit without filling PIN or wants biometric approval
+    if (isBiometricEnabled && pin.length !== 4) {
+      handleBiometricWithdrawal();
+      return;
+    }
+
     if (pin.length !== 4) {
       setStatusMessage({
         type: 'error',
-        text: 'Please enter your 4-digit transaction PIN.',
+        text: 'Please enter your 4-digit transaction PIN or use biometric authorization.',
       });
       return;
     }
@@ -116,20 +190,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
       return;
     }
 
-    setIsProcessing(true);
-    setStatusMessage(null);
-
-    const res = await initiateSmartPayWithdrawal(phone, numAmount, pin);
-    setIsProcessing(false);
-
-    if (res.success) {
-      setStatusMessage({ type: 'success', text: res.message });
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    } else {
-      setStatusMessage({ type: 'error', text: res.message });
-    }
+    await executeWithdrawal(pin);
   };
 
   const handleSavePin = (e: React.FormEvent) => {
@@ -411,30 +472,48 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
               </div>
             )}
 
-            {/* Action Button */}
-            <button
-              type="submit"
-              disabled={
-                isProcessing ||
-                !hasMinimumBalance ||
-                totalDeduction > walletBalance
-              }
-              className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Processing M-Pesa Payout...</span>
-                </>
-              ) : (
-                <>
-                  <ArrowDownRight className="w-4 h-4 text-emerald-400" />
-                  <span>
-                    Withdraw {amount ? formatKsh(Number(amount)) : ''}
-                  </span>
-                </>
+            {/* Action Buttons */}
+            <div className="space-y-2">
+              {isBiometricEnabled && (
+                <button
+                  type="button"
+                  onClick={handleBiometricWithdrawal}
+                  disabled={
+                    isProcessing ||
+                    !hasMinimumBalance ||
+                    totalDeduction > walletBalance
+                  }
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-md shadow-emerald-500/15 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <Fingerprint className="w-4 h-4 text-emerald-200" />
+                  <span>Authorize with Biometrics (Passkey)</span>
+                </button>
               )}
-            </button>
+
+              <button
+                type="submit"
+                disabled={
+                  isProcessing ||
+                  !hasMinimumBalance ||
+                  totalDeduction > walletBalance
+                }
+                className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing M-Pesa Payout...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDownRight className="w-4 h-4 text-emerald-400" />
+                    <span>
+                      {isBiometricEnabled ? 'Or Withdraw with PIN' : `Withdraw ${amount ? formatKsh(Number(amount)) : ''}`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         </div>
       </div>

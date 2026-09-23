@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { smartpayRouter } from './server/smartpay.js';
+import { merchantApiRouter } from './server/merchantApi.js';
 
 dotenv.config();
 
@@ -48,6 +49,9 @@ app.get('/api/health', (req, res) => {
 
 // 2. SmartPayPesa C2B & B2C Payment Gateway
 app.use('/api/smartpay', smartpayRouter);
+
+// 3. Mboka Merchant & Developer API (Linked to Wallet ID for instant settlement)
+app.use('/api/v1', merchantApiRouter);
 
 // Helper to detect 503 / 429 / high demand transient status
 function isTransientCapacityError(err: any): boolean {

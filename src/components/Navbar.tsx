@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import {
-  Home,
   Wallet,
   Users,
-  PenTool,
-  MessageSquare,
-  Store,
   User,
   Shield,
   Bell,
@@ -18,6 +14,8 @@ import {
   X,
   Database,
   UserPlus,
+  LogOut,
+  Code2,
 } from 'lucide-react';
 import { useMboka } from '../context/MbokaContext';
 import { AuthModal } from './AuthModal';
@@ -38,6 +36,8 @@ export const Navbar: React.FC = () => {
     setIsAiCopilotOpen,
     isSupabaseConfigured,
     isSupabaseConnected,
+    isLoggedIn,
+    logoutUser,
   } = useMboka();
 
   const [hideBalance, setHideBalance] = useState<boolean>(false);
@@ -47,13 +47,15 @@ export const Navbar: React.FC = () => {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const navItems: { id: ActiveTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'wallet', label: 'Wallet', icon: Wallet },
-    { id: 'affiliate', label: 'Affiliate', icon: Users },
-    { id: 'blog', label: 'Blog', icon: PenTool },
-    { id: 'chat', label: 'Chat', icon: MessageSquare },
-    { id: 'pos', label: 'POS Store', icon: Store },
+  const navItems: {
+    id: ActiveTab;
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    badge?: string;
+  }[] = [
+    { id: 'wallet', label: 'Wallet & Ledger', icon: Wallet },
+    { id: 'api', label: 'Developer API', icon: Code2 },
+    { id: 'affiliate', label: 'Affiliate Mbogi', icon: Users },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
@@ -64,7 +66,10 @@ export const Navbar: React.FC = () => {
           {/* Logo & Brand */}
           <div className="flex items-center gap-6">
             <button
-              onClick={() => setActiveTab('home')}
+              onClick={() => {
+                setIsAdminMode(false);
+                setActiveTab('wallet');
+              }}
               className="flex items-center gap-2.5 text-left group cursor-pointer focus:outline-none"
             >
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-heading font-black text-xl shadow-md group-hover:scale-105 transition-transform">
@@ -105,6 +110,11 @@ export const Navbar: React.FC = () => {
                   >
                     <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
                     <span>{item.label}</span>
+                    {item.badge && (
+                      <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 leading-none">
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -177,7 +187,7 @@ export const Navbar: React.FC = () => {
                 const nextAdmin = !isAdminMode;
                 setIsAdminMode(nextAdmin);
                 if (nextAdmin) setActiveTab('admin');
-                else setActiveTab('home');
+                else setActiveTab('wallet');
               }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                 isAdminMode
@@ -261,15 +271,26 @@ export const Navbar: React.FC = () => {
               )}
             </div>
 
-            {/* Sign Up / Switch Account Button */}
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 text-xs font-bold transition-all cursor-pointer"
-              title="Register a new real user account with positive balance"
-            >
-              <UserPlus className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Sign Up</span>
-            </button>
+            {/* If user has an account & is logged in, show Logout instead of Create Account */}
+            {isLoggedIn ? (
+              <button
+                onClick={logoutUser}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 text-xs font-bold transition-all cursor-pointer"
+                title="Log out of your account"
+              >
+                <LogOut className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600 transition-colors" />
+                <span>Logout</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title="Create an account or log in"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Create Account</span>
+              </button>
+            )}
 
             {/* Profile Avatar */}
             <button
@@ -309,16 +330,32 @@ export const Navbar: React.FC = () => {
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-1 shadow-lg animate-in slide-in-from-top-2">
-          <button
-            onClick={() => {
-              setShowAuthModal(true);
-              setMobileMenuOpen(false);
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 mb-2"
-          >
-            <UserPlus className="w-5 h-5 text-emerald-600" />
-            <span>Create Account / Sign Up (Bal &gt; 0)</span>
-          </button>
+          {isLoggedIn ? (
+            <button
+              onClick={() => {
+                logoutUser();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 mb-2 cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <LogOut className="w-4 h-4 text-rose-600" />
+                <span>Logout ({user.name.split(' ')[0]})</span>
+              </div>
+              <span className="text-xs text-slate-400 font-mono">@{user.username}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setShowAuthModal(true);
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white mb-2 cursor-pointer shadow-xs"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Create Account / Log In</span>
+            </button>
+          )}
 
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -331,12 +368,19 @@ export const Navbar: React.FC = () => {
                   setActiveTab(item.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer ${
                   isActive ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3">
+                  <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 leading-none">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}

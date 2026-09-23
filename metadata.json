@@ -1,6 +1,6 @@
 {
   "name": "Mboka",
-  "description": "All-in-one digital ecosystem app featuring digital wallet, affiliate rewards, monetized blogging, community chat, POS digital utilities, and admin management.",
-  "requestFramePermissions": [],
+  "description": "Modern Kenyan digital wallet featuring M-Pesa STK deposits, zero-fee P2P transfers by Wallet ID, automated B2C payouts, Mbogi affiliate rewards, and verified ledger tracking.",
+  "requestFramePermissions": ["microphone", "camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

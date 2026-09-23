@@ -36,6 +36,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   const [activeType, setActiveType] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount-desc' | 'amount-asc'>('newest');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -86,10 +87,8 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         ? tx.type === 'withdrawal'
         : activeType === 'transfers'
         ? tx.type === 'transfer_in' || tx.type === 'transfer_out'
-        : activeType === 'pos'
-        ? tx.category === 'pos'
-        : activeType === 'rewards'
-        ? tx.category === 'affiliate' || tx.category === 'blog'
+        : activeType === 'affiliate'
+        ? tx.category === 'affiliate' || tx.type === 'affiliate_payout'
         : true;
 
     const matchesStatus =
@@ -106,7 +105,17 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     return matchesType && matchesStatus && matchesSearch;
   });
 
-  const displayedList = maxItems ? filtered.slice(0, maxItems) : filtered;
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'amount-desc') return b.amount - a.amount;
+    if (sortBy === 'amount-asc') return a.amount - b.amount;
+    if (sortBy === 'oldest') {
+      return new Date(a.date.replace(/ at .*$/, '')).getTime() - new Date(b.date.replace(/ at .*$/, '')).getTime();
+    }
+    // Default newest
+    return new Date(b.date.replace(/ at .*$/, '')).getTime() - new Date(a.date.replace(/ at .*$/, '')).getTime();
+  });
+
+  const displayedList = maxItems ? sorted.slice(0, maxItems) : sorted;
 
   // KPI calculations
   const totalDeposits = transactions
@@ -246,30 +255,45 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             </div>
 
             {/* Status Filter */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">Status:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-2.5 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-              >
-                <option value="all">All Statuses</option>
-                <option value="completed">Completed</option>
-                <option value="pending">Pending</option>
-                <option value="failed">Failed</option>
-              </select>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e: any) => setSortBy(e.target.value)}
+                  className="text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-2.5 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="amount-desc">Amount: High to Low</option>
+                  <option value="amount-asc">Amount: Low to High</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">Status:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-2.5 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* Type Filter Pills */}
+          {/* Type Filter Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             {[
               { id: 'all', label: 'All Transactions' },
               { id: 'deposits', label: 'Deposits (C2B)' },
-              { id: 'payouts', label: 'Payouts (B2C)' },
+              { id: 'payouts', label: 'Withdrawals (B2C)' },
               { id: 'transfers', label: 'P2P Transfers' },
-              { id: 'pos', label: 'POS & Utilities' },
-              { id: 'rewards', label: 'Earnings & Rewards' },
+              { id: 'affiliate', label: 'Affiliate Commissions' },
             ].map((tab) => (
               <button
                 key={tab.id}

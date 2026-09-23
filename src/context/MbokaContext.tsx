@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   ActiveTab,
   UserProfile,
@@ -8,6 +8,9 @@ import {
   ChatConversation,
   AppNotification,
   PosReceipt,
+  AutoB2cSettings,
+  ApiCharge,
+  BiometricSettings,
 } from '../types';
 import {
   initialUser,
@@ -17,6 +20,10 @@ import {
   initialConversations,
   initialNotifications,
 } from '../data/mockData';
+import {
+  registerNativeBiometric,
+} from '../services/biometricAuth';
+import { BiometricPromptModal } from '../components/BiometricPromptModal';
 import {
   isSupabaseConfigured,
   testSupabaseConnection,
@@ -46,6 +53,7 @@ interface MbokaContextType {
   conversations: ChatConversation[];
   activeConversationId: string;
   setActiveConversationId: (id: string) => void;
+  createGroupConversation: (name: string, description: string, category?: string) => ChatConversation;
   notifications: AppNotification[];
   isAiCopilotOpen: boolean;
   setIsAiCopilotOpen: (open: boolean) => void;
@@ -118,8 +126,33 @@ interface MbokaContextType {
   };
   addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => void;
   updateUserProfile: (updates: Partial<UserProfile & { walletPin?: string }>) => void;
-  registerUser: (userData: { name: string; phone: string; email?: string; pin: string }) => UserProfile;
+  registerUser: (userData: { name: string; phone: string; email?: string; pin: string; referralCode?: string }) => UserProfile;
+  activateAccount: (method?: 'mpesa' | 'wallet' | 'instant') => Promise<{ success: boolean; message: string }>;
+  updateAutoB2cSettings: (settings: AutoB2cSettings) => void;
+  triggerAutoB2cCheck: () => Promise<boolean>;
   resetAllData: () => void;
+  isLoggedIn: boolean;
+  logoutUser: () => void;
+  loginUser: (phoneOrWallet: string, pin: string) => { success: boolean; message: string };
+  recordApiPaymentSettlement: (charge: ApiCharge) => void;
+  biometricPrompt: {
+    isOpen: boolean;
+    actionTitle: string;
+    actionDescription?: string;
+    amountText?: string;
+    recipientText?: string;
+    onSuccess: () => void;
+  } | null;
+  triggerBiometricAuth: (options: {
+    actionTitle: string;
+    actionDescription?: string;
+    amountText?: string;
+    recipientText?: string;
+    onSuccess: () => void;
+  }) => void;
+  closeBiometricAuth: () => void;
+  updateBiometricSettings: (settings: Partial<BiometricSettings>) => void;
+  registerBiometricPasskey: () => Promise<{ success: boolean; message: string }>;
 }
 
 const MbokaContext = createContext<MbokaContextType | undefined>(undefined);
@@ -128,11 +161,88 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Load or fallback to mock data
   const [user, setUser] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('mboka_user');
-    return saved ? JSON.parse(saved) : initialUser;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.walletId) {
+          parsed.walletId = parsed.referralCode?.startsWith('MBK-') ? parsed.referralCode : 'MBK-904281';
+          parsed.referralCode = parsed.walletId;
+        }
+        if (parsed.isActivated === undefined) {
+          parsed.isActivated = true;
+        }
+        if (!parsed.autoB2cSettings) {
+          parsed.autoB2cSettings = { enabled: false, phone: parsed.phone || '0796282073', amount: 100 };
+        }
+        if (!parsed.biometricSettings) {
+          parsed.biometricSettings = {
+            enabled: true,
+            credentialId: 'mbk_bio_platform_credential',
+            deviceName: 'Native Platform Authenticator',
+            biometricType: 'fingerprint',
+            registeredAt: 'Jan 2026',
+            requireForWithdrawals: true,
+            requireForP2P: true,
+            requireForProfileEdit: true,
+          };
+        }
+        return parsed;
+      } catch (e) {
+        return initialUser;
+      }
+    }
+    return initialUser;
   });
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('wallet');
   const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    const saved = localStorage.getItem('mboka_logged_in');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const logoutUser = () => {
+    setIsLoggedIn(false);
+    localStorage.setItem('mboka_logged_in', 'false');
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'Logged Out',
+      message: `You have successfully logged out of @${user.username}.`,
+      type: 'system',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'wallet',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+  };
+
+  const loginUser = (phoneOrWallet: string, pin: string): { success: boolean; message: string } => {
+    const cleanInput = phoneOrWallet.trim().toLowerCase();
+    const isMatch =
+      (user.walletId && user.walletId.toLowerCase() === cleanInput) ||
+      user.phone.replace(/\D/g, '') === phoneOrWallet.replace(/\D/g, '') ||
+      user.username.toLowerCase() === cleanInput.replace(/^@/, '');
+
+    const validPin = user.walletPin || user.pin || '1234';
+    if (isMatch && pin !== validPin) {
+      return { success: false, message: 'Invalid 4-digit security PIN for this account.' };
+    }
+
+    setIsLoggedIn(true);
+    localStorage.setItem('mboka_logged_in', 'true');
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'Logged In',
+      message: `Welcome back, ${user.name}! Connected to Wallet ${user.walletId}.`,
+      type: 'wallet',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'wallet',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+    return { success: true, message: 'Signed in successfully!' };
+  };
 
   const [walletBalance, setWalletBalance] = useState<number>(() => {
     const saved = localStorage.getItem('mboka_balance');
@@ -171,7 +281,17 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [conversations, setConversations] = useState<ChatConversation[]>(() => {
     const saved = localStorage.getItem('mboka_conversations');
-    return saved ? JSON.parse(saved) : initialConversations;
+    if (saved) {
+      try {
+        const parsed: ChatConversation[] = JSON.parse(saved);
+        const existingIds = new Set(parsed.map((c) => c.id));
+        const missing = initialConversations.filter((c) => !existingIds.has(c.id));
+        return [...parsed, ...missing];
+      } catch {
+        return initialConversations;
+      }
+    }
+    return initialConversations;
   });
 
   const [activeConversationId, setActiveConversationId] = useState<string>('conv_1');
@@ -600,28 +720,147 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   };
 
-  // 3. P2P Send Money
-  const sendMoneyP2P = async (recipient: string, amount: number, notes: string, pin: string) => {
-    if (pin !== user.pin) {
-      return { success: false, message: 'Incorrect PIN. Transfer cancelled.' };
+  // Automation for B2C payment: triggers automatically when funds land on wallet
+  // Disburses the full available balance (amount set and above), not just the exact threshold
+  const checkAndTriggerAutoB2c = async (currentBal: number) => {
+    const settings = user.autoB2cSettings;
+    if (!settings || !settings.enabled || !settings.amount || !settings.phone) {
+      return false;
+    }
+    const threshold = settings.amount;
+    // Disburses amount set and above (the full available balance meeting or exceeding the threshold)
+    if (currentBal >= threshold && threshold >= 10) {
+      const disburseAmount = currentBal; // Amount set and above
+      setTimeout(async () => {
+        try {
+          const res = await initiateSmartPayWithdrawal(
+            settings.phone,
+            disburseAmount,
+            user.pin || user.walletPin || '1234'
+          );
+          if (res.success) {
+            const autoNotif: AppNotification = {
+              id: `notif_auto_${Date.now()}`,
+              title: 'Automated B2C Settlement Executed',
+              message: `Auto-rule executed: ${formatKsh(disburseAmount)} (full balance at or above threshold ${formatKsh(threshold)}) was disbursed to ${settings.phone}.`,
+              type: 'wallet',
+              timestamp: 'Just now',
+              read: false,
+              linkTab: 'wallet',
+            };
+            setNotifications((prev) => [autoNotif, ...prev]);
+          }
+        } catch (err) {
+          console.warn('Auto B2C execution error:', err);
+        }
+      }, 700);
+      return true;
+    }
+    return false;
+  };
+
+  const updateAutoB2cSettings = (settings: AutoB2cSettings) => {
+    setUser((prev) => {
+      const updated: UserProfile = { ...prev, autoB2cSettings: settings };
+      localStorage.setItem('mboka_user', JSON.stringify(updated));
+      supabaseService.syncUserProfile(updated).catch(() => {});
+      return updated;
+    });
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'B2C Automation Updated',
+      message: settings.enabled
+        ? `Automatic B2C settlement active for ${settings.phone}: automates balances of ${formatKsh(settings.amount)} and above.`
+        : 'Automated B2C payout is currently paused.',
+      type: 'security',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'wallet',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+  };
+
+  const triggerAutoB2cCheck = async () => {
+    return checkAndTriggerAutoB2c(walletBalance);
+  };
+
+  // Automated B2C Payment effect: when funds land on user's wallet, payment is processed automatically
+  const prevBalanceRef = useRef<number>(walletBalance);
+  const isAutoB2cProcessingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    // Check if new funds landed in the wallet
+    if (walletBalance > prevBalanceRef.current) {
+      const settings = user.autoB2cSettings;
+      if (
+        settings?.enabled &&
+        settings.amount >= 10 &&
+        settings.phone &&
+        walletBalance >= settings.amount &&
+        !isAutoB2cProcessingRef.current
+      ) {
+        isAutoB2cProcessingRef.current = true;
+        // Automates the entire balance set and above, not just the exact minimum amount
+        const disburseAmount = walletBalance;
+        const targetPhone = settings.phone;
+        const pinToUse = user.walletPin || user.pin || '1234';
+
+        const timer = setTimeout(async () => {
+          try {
+            await initiateSmartPayWithdrawal(targetPhone, disburseAmount, pinToUse);
+          } catch (e) {
+            console.warn('Auto B2C payout trigger failed:', e);
+          } finally {
+            isAutoB2cProcessingRef.current = false;
+          }
+        }, 800);
+
+        prevBalanceRef.current = walletBalance;
+        return () => clearTimeout(timer);
+      }
+    }
+    prevBalanceRef.current = walletBalance;
+  }, [walletBalance, user.autoB2cSettings, user.pin, user.walletPin]);
+
+  // 3. P2P Send Money by Wallet ID (strictly relies on Wallet ID)
+  const sendMoneyP2P = async (recipientWalletId: string, amount: number, notes: string, pin: string) => {
+    const activePin = user.walletPin || user.pin || '1234';
+    if (pin !== activePin) {
+      return { success: false, message: 'Incorrect 4-digit PIN. Transfer cancelled.' };
+    }
+    if (amount <= 0) {
+      return { success: false, message: 'Transfer amount must be greater than 0.' };
     }
     if (amount > walletBalance) {
-      return { success: false, message: 'Insufficient wallet balance.' };
+      return { success: false, message: `Insufficient wallet balance (${formatKsh(walletBalance)}).` };
+    }
+
+    const cleanWalletId = recipientWalletId.trim().toUpperCase();
+    if (!cleanWalletId) {
+      return { success: false, message: 'Please enter a valid recipient Wallet ID (e.g. MBK-102948).' };
+    }
+
+    if (
+      cleanWalletId === (user.walletId || '').toUpperCase() ||
+      cleanWalletId === (user.referralCode || '').toUpperCase()
+    ) {
+      return { success: false, message: 'Cannot transfer funds to your own Wallet ID.' };
     }
 
     const ref = `P2P-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const newTx: WalletTransaction = {
       id: `tx_${Date.now()}`,
       type: 'transfer_out',
-      title: `Sent to ${recipient}`,
+      title: `P2P Transfer to Wallet ${cleanWalletId}`,
       category: 'p2p',
       amount,
       fee: 0, // Mboka internal P2P is free!
       date: 'Just now',
       reference: ref,
       status: 'completed',
-      recipientOrSender: recipient,
-      notes: notes || 'Mboka P2P Transfer',
+      recipientOrSender: `Wallet ID: ${cleanWalletId}`,
+      notes: notes || `Direct P2P transfer to ${cleanWalletId}`,
     };
 
     setWalletBalance((prev) => prev - amount);
@@ -632,8 +871,8 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const newNotif: AppNotification = {
       id: `notif_${Date.now()}`,
-      title: 'Money Sent',
-      message: `You transferred ${formatKsh(amount)} to ${recipient}. Ref: ${ref}`,
+      title: 'P2P Transfer Sent',
+      message: `Successfully transferred ${formatKsh(amount)} to Wallet ID ${cleanWalletId}. Ref: ${ref}`,
       type: 'wallet',
       timestamp: 'Just now',
       read: false,
@@ -641,7 +880,40 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
     setNotifications((prev) => [newNotif, ...prev]);
 
-    return { success: true, message: `Successfully sent ${formatKsh(amount)} to ${recipient}!` };
+    return { success: true, message: `Successfully transferred ${formatKsh(amount)} to Wallet ID ${cleanWalletId}!` };
+  };
+
+  // 3b. Real-time API Payment Settlement: funds collected via Merchant API settle into user's wallet
+  const recordApiPaymentSettlement = (charge: ApiCharge) => {
+    setWalletBalance((prev) => prev + charge.amount);
+
+    const newTx: WalletTransaction = {
+      id: `tx_${Date.now()}`,
+      type: 'api_collection',
+      title: `API Payment Collected (${charge.reference})`,
+      category: 'api',
+      amount: charge.amount,
+      fee: 0,
+      date: 'Just now',
+      reference: charge.mpesaReceiptNumber || charge.id,
+      status: 'completed',
+      recipientOrSender: `${charge.phone} (Merchant API)`,
+      notes: charge.description || `Payment collected via Mboka Wallet API (settled to ${charge.walletId})`,
+    };
+
+    setTransactions((prev) => [newTx, ...prev]);
+    supabaseService.recordTransaction(newTx).catch(() => {});
+
+    const notif: AppNotification = {
+      id: `notif_api_${Date.now()}`,
+      title: 'Merchant API Payment Settled',
+      message: `KSh ${formatKsh(charge.amount)} collected from ${charge.phone} settled directly into your wallet (${charge.walletId}). Ref: ${charge.reference}`,
+      type: 'wallet',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'api',
+    };
+    setNotifications((prev) => [notif, ...prev]);
   };
 
   // 4. Central Ledger Transfer: Affiliate / Blog earnings -> Wallet
@@ -772,7 +1044,7 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       type: 'pos',
       timestamp: 'Just now',
       read: false,
-      linkTab: 'pos',
+      linkTab: 'wallet',
     };
     setNotifications((prev) => [newNotif, ...prev]);
 
@@ -819,7 +1091,7 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       type: 'blog',
       timestamp: 'Just now',
       read: false,
-      linkTab: 'blog',
+      linkTab: 'wallet',
     };
     setNotifications((prev) => [newNotif, ...prev]);
   };
@@ -882,6 +1154,35 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
+  const createGroupConversation = (name: string, description: string, category: string = 'Community Guild') => {
+    const newGroup: ChatConversation = {
+      id: `group_${Date.now()}`,
+      name,
+      avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
+      isGroup: true,
+      badge: category,
+      lastMessage: `Group created by ${user.name}`,
+      lastMessageTime: 'Just now',
+      unreadCount: 0,
+      membersCount: 1,
+      description,
+      messages: [
+        {
+          id: `m_welcome_${Date.now()}`,
+          senderId: 'system',
+          senderName: 'Mboka Guild Bot',
+          senderAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150',
+          text: `🎉 Welcome to ${name}! Members can chat, share trade insights, or initiate group audio & video calls.`,
+          timestamp: 'Just now',
+          isMe: false,
+        },
+      ],
+    };
+    setConversations((prev) => [newGroup, ...prev]);
+    setActiveConversationId(newGroup.id);
+    return newGroup;
+  };
+
   // 8. Notifications
   const markNotificationRead = (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
@@ -891,32 +1192,164 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  // 9. Invite friend
+  // 9. Invite friend & Affiliate automation (Commission: 20 KSh landing directly in wallet upon activation)
   const addInvitedUser = (name: string, phone: string) => {
+    const commission = 20; // Exact KSh 20 per successful referral
     const newInv: InvitedUser = {
       id: `inv_${Date.now()}`,
       name,
       phone,
       registeredDate: 'Today',
       status: 'qualified',
-      earnedCommission: 150,
+      earnedCommission: commission,
     };
     setInvitedUsers((prev) => [newInv, ...prev]);
-    setAffiliateBalance((prev) => prev + 150);
+
+    // Referral commission lands on wallet automatically
+    const ref = `REF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const refTx: WalletTransaction = {
+      id: `tx_ref_${Date.now()}`,
+      type: 'affiliate_payout',
+      title: `Referral Commission (${name} - Activated)`,
+      category: 'wallet',
+      amount: commission,
+      fee: 0,
+      date: 'Just now',
+      reference: ref,
+      status: 'completed',
+      recipientOrSender: `Referral: ${name}`,
+      notes: `KSh 20.00 automated referral commission landed in wallet`,
+    };
+
+    setWalletBalance((prev) => {
+      const nextBal = prev + commission;
+      checkAndTriggerAutoB2c(nextBal);
+      return nextBal;
+    });
+    setTransactions((prev) => [refTx, ...prev]);
 
     // Asynchronously sync to Supabase database if configured
     supabaseService.recordInvitedUser(newInv).catch((e) => console.warn('Supabase recordInvite:', e));
+    supabaseService.recordTransaction(refTx).catch((e) => console.warn('Supabase recordTx:', e));
 
     const newNotif: AppNotification = {
       id: `notif_${Date.now()}`,
-      title: 'New Referral Registered!',
-      message: `${name} joined using your code. KSh 150 added to your affiliate earnings.`,
+      title: 'Referral Activated!',
+      message: `${name} activated their account! KSh 20.00 commission landed automatically into your wallet.`,
       type: 'affiliate',
       timestamp: 'Just now',
       read: false,
-      linkTab: 'affiliate',
+      linkTab: 'wallet',
     };
     setNotifications((prev) => [newNotif, ...prev]);
+  };
+
+  // Credit referral commission when a referred user activates their account
+  const creditReferralCommission = async (referrerWalletId: string, referredName: string) => {
+    const commission = 20; // 20 KSh for every successful referral
+    const cleanRef = referrerWalletId.trim().toUpperCase();
+
+    // If active user is the referrer, disburse directly to their wallet
+    if (
+      (user.walletId && user.walletId.toUpperCase() === cleanRef) ||
+      (user.referralCode && user.referralCode.toUpperCase() === cleanRef)
+    ) {
+      const ref = `REF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const refTx: WalletTransaction = {
+        id: `tx_ref_${Date.now()}`,
+        type: 'affiliate_payout',
+        title: `Referral Commission (${referredName} - Activated)`,
+        category: 'wallet',
+        amount: commission,
+        fee: 0,
+        date: 'Just now',
+        reference: ref,
+        status: 'completed',
+        recipientOrSender: `Wallet ID: ${cleanRef}`,
+        notes: `KSh 20.00 automated commission for active platform referral`,
+      };
+
+      setWalletBalance((prev) => {
+        const nextBal = prev + commission;
+        checkAndTriggerAutoB2c(nextBal);
+        return nextBal;
+      });
+      setTransactions((prev) => [refTx, ...prev]);
+      supabaseService.recordTransaction(refTx).catch(() => {});
+
+      const refNotif: AppNotification = {
+        id: `notif_ref_${Date.now()}`,
+        title: 'Referral Commission Landed!',
+        message: `${referredName} activated with KSh 50! KSh 20.00 commission landed directly in your wallet.`,
+        type: 'affiliate',
+        timestamp: 'Just now',
+        read: false,
+        linkTab: 'wallet',
+      };
+      setNotifications((prev) => [refNotif, ...prev]);
+    }
+  };
+
+  // Account Platform Activation with 50 KSh
+  const activateAccount = async (method: 'mpesa' | 'wallet' | 'instant' = 'instant') => {
+    const fee = 50;
+
+    if (method === 'wallet') {
+      if (walletBalance < fee) {
+        return {
+          success: false,
+          message: `Insufficient wallet balance (${formatKsh(walletBalance)}). Need KSh 50.00 for platform activation.`,
+        };
+      }
+      setWalletBalance((prev) => prev - fee);
+    }
+
+    const ref = `ACT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const actTx: WalletTransaction = {
+      id: `tx_act_${Date.now()}`,
+      type: 'pos_purchase',
+      title: 'Mboka Platform Account Activation Fee',
+      category: 'wallet',
+      amount: fee,
+      fee: 0,
+      date: 'Just now',
+      reference: ref,
+      status: 'completed',
+      recipientOrSender: 'Mboka Platform Gateway',
+      notes: `One-time platform activation fee for Wallet ID: ${user.walletId}`,
+    };
+
+    setTransactions((prev) => [actTx, ...prev]);
+    supabaseService.recordTransaction(actTx).catch(() => {});
+
+    // Activate user
+    setUser((prev) => {
+      const updated: UserProfile = { ...prev, isActivated: true };
+      localStorage.setItem('mboka_user', JSON.stringify(updated));
+      supabaseService.syncUserProfile(updated).catch(() => {});
+      return updated;
+    });
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      title: 'Platform Access Unlocked!',
+      message: `Your account is now activated! Your unique Wallet ID ${user.walletId} is fully operational.`,
+      type: 'security',
+      timestamp: 'Just now',
+      read: false,
+      linkTab: 'wallet',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+
+    // If referred by someone, credit them automatically
+    if (user.referredBy) {
+      await creditReferralCommission(user.referredBy, user.name);
+    }
+
+    return {
+      success: true,
+      message: `Account activated successfully! Wallet ID ${user.walletId} is active.`,
+    };
   };
 
   const updateUserPin = (newPin: string) => {
@@ -931,12 +1364,21 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return false;
   };
 
-  const registerUser = (userData: { name: string; phone: string; email?: string; pin: string }) => {
+  const registerUser = (userData: {
+    name: string;
+    phone: string;
+    email?: string;
+    pin: string;
+    referralCode?: string;
+  }) => {
     const cleanPhone = userData.phone.startsWith('+')
       ? userData.phone
       : userData.phone.startsWith('0')
       ? '+254' + userData.phone.substring(1)
       : '+254' + userData.phone;
+
+    // Unique wallet ID for every user who signs up
+    const generatedWalletId = `MBK-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const newUser: UserProfile = {
       id: `usr_${Date.now().toString().slice(-6)}`,
@@ -945,51 +1387,45 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       phone: cleanPhone,
       email: userData.email || `${userData.name.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      referralCode: `MBOKA-${Math.floor(Math.random() * 9000 + 1000)}`,
+      walletId: generatedWalletId,
+      referralCode: generatedWalletId, // Wallet ID is the referral code
+      referredBy: userData.referralCode ? userData.referralCode.trim().toUpperCase() : undefined,
       isKycVerified: true,
+      isActivated: false, // Must activate with 50 KSh to access platform
       role: 'user',
       joinedDate: 'Today',
       pin: userData.pin,
       walletPin: userData.pin,
+      autoB2cSettings: {
+        enabled: false,
+        phone: cleanPhone,
+        amount: 100,
+      },
     };
 
-    // User signup requirement: Starting balance > 0 (e.g. KSh 20 welcome bonus credit)
-    const welcomeCredit = 20;
-    const welcomeTx: WalletTransaction = {
-      id: `tx_bonus_${Date.now()}`,
-      type: 'deposit',
-      title: 'Welcome Sign-up Bonus Credit',
-      category: 'wallet',
-      amount: welcomeCredit,
-      fee: 0,
-      date: 'Just now',
-      reference: `MBOKA-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      status: 'completed',
-      recipientOrSender: 'Mboka Rewards Pool',
-      notes: 'Real onboarding credit (>0) ready for immediate testing and B2C withdrawal',
-    };
-
+    // User signup bonus REMOVED completely - starting balance is 0
     setUser(newUser);
-    setWalletBalance(welcomeCredit);
+    setIsLoggedIn(true);
+    setWalletBalance(0);
     setAffiliateBalance(0);
     setBlogBalance(0);
     setPosFloatBalance(0);
-    setTransactions([welcomeTx]);
+    setTransactions([]);
 
     localStorage.setItem('mboka_user', JSON.stringify(newUser));
-    localStorage.setItem('mboka_balance', welcomeCredit.toString());
+    localStorage.setItem('mboka_logged_in', 'true');
+    localStorage.setItem('mboka_balance', '0');
     localStorage.setItem('mboka_affiliate_bal', '0');
     localStorage.setItem('mboka_blog_bal', '0');
     localStorage.setItem('mboka_pos_float', '0');
-    localStorage.setItem('mboka_transactions', JSON.stringify([welcomeTx]));
+    localStorage.setItem('mboka_transactions', JSON.stringify([]));
 
     supabaseService.syncUserProfile(newUser).catch(() => {});
-    supabaseService.recordTransaction(welcomeTx).catch(() => {});
 
     const notif: AppNotification = {
       id: `notif_${Date.now()}`,
-      title: 'Account Activated!',
-      message: `Karibu ${newUser.name}! Your wallet has been credited with KSh ${welcomeCredit}.00 welcome bonus.`,
+      title: 'Registration Complete',
+      message: `Karibu ${newUser.name}! Your unique Wallet ID is ${generatedWalletId}. Please complete the one-time KSh 50 activation to access the platform.`,
       type: 'wallet',
       timestamp: 'Just now',
       read: false,
@@ -1039,6 +1475,8 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.removeItem('mboka_notifications');
 
     setUser(initialUser);
+    setIsLoggedIn(true);
+    localStorage.setItem('mboka_logged_in', 'true');
     setWalletBalance(5250);
     setAffiliateBalance(1350);
     setBlogBalance(2840);
@@ -1048,6 +1486,81 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setArticles(initialArticles);
     setConversations(initialConversations);
     setNotifications(initialNotifications);
+  };
+
+  // Biometric Security Layer State & Actions
+  const [biometricPrompt, setBiometricPrompt] = useState<{
+    isOpen: boolean;
+    actionTitle: string;
+    actionDescription?: string;
+    amountText?: string;
+    recipientText?: string;
+    onSuccess: () => void;
+  } | null>(null);
+
+  const triggerBiometricAuth = (options: {
+    actionTitle: string;
+    actionDescription?: string;
+    amountText?: string;
+    recipientText?: string;
+    onSuccess: () => void;
+  }) => {
+    setBiometricPrompt({
+      ...options,
+      isOpen: true,
+    });
+  };
+
+  const closeBiometricAuth = () => {
+    setBiometricPrompt(null);
+  };
+
+  const updateBiometricSettings = (settings: Partial<BiometricSettings>) => {
+    setUser((prev) => {
+      const current = prev.biometricSettings || {
+        enabled: true,
+        credentialId: 'mbk_bio_platform_credential',
+        deviceName: 'Native Platform Authenticator',
+        biometricType: 'fingerprint',
+        registeredAt: 'Jan 2026',
+        requireForWithdrawals: true,
+        requireForP2P: true,
+        requireForProfileEdit: true,
+      };
+      const updatedBio: BiometricSettings = {
+        ...current,
+        ...settings,
+      };
+      const updatedUser = {
+        ...prev,
+        biometricSettings: updatedBio,
+      };
+      localStorage.setItem('mboka_user', JSON.stringify(updatedUser));
+      return updatedUser;
+    });
+  };
+
+  const registerBiometricPasskey = async (): Promise<{ success: boolean; message: string }> => {
+    const res = await registerNativeBiometric(user);
+    if (res.success && res.credentialId) {
+      updateBiometricSettings({
+        enabled: true,
+        credentialId: res.credentialId,
+        registeredAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      });
+      const notif: AppNotification = {
+        id: `notif_${Date.now()}`,
+        title: 'Biometric Passkey Registered',
+        message: 'Native device hardware passkey configured successfully. Sensitive actions are now biometrically secured.',
+        type: 'system',
+        timestamp: 'Just now',
+        read: false,
+        linkTab: 'profile',
+      };
+      setNotifications((prev) => [notif, ...prev]);
+      return { success: true, message: 'Native hardware biometric credential registered successfully!' };
+    }
+    return { success: false, message: res.error || 'Biometric registration failed.' };
   };
 
   const adminStats = {
@@ -1090,6 +1603,7 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         likeArticle,
         addComment,
         sendMessage,
+        createGroupConversation,
         markNotificationRead,
         markAllNotificationsRead,
         addInvitedUser,
@@ -1100,7 +1614,14 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addNotification,
         updateUserProfile,
         registerUser,
+        activateAccount,
+        updateAutoB2cSettings,
+        triggerAutoB2cCheck,
         resetAllData,
+        isLoggedIn,
+        logoutUser,
+        loginUser,
+        recordApiPaymentSettlement,
         isSupabaseConfigured,
         isSupabaseConnected,
         checkSupabaseHealth,
@@ -1112,9 +1633,25 @@ export const MbokaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         confirmSmartPayDeposit,
         recordCancelledDeposit,
         initiateSmartPayWithdrawal,
+        biometricPrompt,
+        triggerBiometricAuth,
+        closeBiometricAuth,
+        updateBiometricSettings,
+        registerBiometricPasskey,
       }}
     >
       {children}
+      {biometricPrompt && biometricPrompt.isOpen && (
+        <BiometricPromptModal
+          isOpen={biometricPrompt.isOpen}
+          onClose={closeBiometricAuth}
+          onSuccess={biometricPrompt.onSuccess}
+          actionTitle={biometricPrompt.actionTitle}
+          actionDescription={biometricPrompt.actionDescription}
+          amountText={biometricPrompt.amountText}
+          recipientText={biometricPrompt.recipientText}
+        />
+      )}
     </MbokaContext.Provider>
   );
 };

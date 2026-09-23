@@ -6,25 +6,19 @@
 import React from 'react';
 import { MbokaProvider, useMboka } from './context/MbokaContext';
 import { Navbar } from './components/Navbar';
-import { HomeView } from './components/HomeView';
 import { WalletView } from './components/WalletView';
 import { AffiliateView } from './components/AffiliateView';
-import { BlogView } from './components/BlogView';
-import { ChatView } from './components/ChatView';
-import { PosView } from './components/PosView';
+import { DeveloperApiView } from './components/DeveloperApiView';
 import { ProfileView } from './components/ProfileView';
 import { AdminView } from './components/AdminView';
 import { ReceiptModal } from './components/ReceiptModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import {
-  Home,
   Wallet,
   Users,
-  PenTool,
-  Store,
   Headphones,
-  MessageSquare,
-  Shield,
+  User,
+  Code2,
 } from 'lucide-react';
 import { ActiveTab } from './types';
 
@@ -40,32 +34,32 @@ const MainContent: React.FC = () => {
     setIsAiCopilotOpen,
   } = useMboka();
 
-  const mobileNavItems: { id: ActiveTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'home', label: 'Home', icon: Home },
+  const mobileNavItems: {
+    id: ActiveTab;
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    badge?: string;
+  }[] = [
     { id: 'wallet', label: 'Wallet', icon: Wallet },
-    { id: 'pos', label: 'POS', icon: Store },
+    { id: 'api', label: 'API', icon: Code2 },
     { id: 'affiliate', label: 'Affiliate', icon: Users },
-    { id: 'blog', label: 'Blog', icon: PenTool },
-    { id: 'chat', label: 'Chat', icon: MessageSquare },
+    { id: 'profile', label: 'Profile', icon: User },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100/70 flex flex-col font-sans text-slate-900 pb-20 lg:pb-8">
+    <div className="min-h-screen bg-slate-50/80 flex flex-col font-sans text-slate-900 pb-20 lg:pb-8">
       {/* Top Sticky Navigation */}
       <Navbar />
 
       {/* Main App Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {isAdminMode ? (
           <AdminView />
         ) : (
           <>
-            {activeTab === 'home' && <HomeView />}
             {activeTab === 'wallet' && <WalletView />}
+            {activeTab === 'api' && <DeveloperApiView />}
             {activeTab === 'affiliate' && <AffiliateView />}
-            {activeTab === 'blog' && <BlogView />}
-            {activeTab === 'chat' && <ChatView />}
-            {activeTab === 'pos' && <PosView />}
             {activeTab === 'profile' && <ProfileView />}
             {activeTab === 'admin' && <AdminView />}
           </>
@@ -110,32 +104,34 @@ const MainContent: React.FC = () => {
                 setIsAdminMode(false);
                 setActiveTab(item.id);
               }}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+              className={`relative flex flex-col items-center gap-0.5 py-1 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 isActive ? 'text-emerald-700 font-extrabold' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <div className="relative">
+                <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+              </div>
               <span>{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* Simple Footer */}
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-4 text-center text-xs text-slate-400 border-t border-slate-200/50 mt-12">
-        <div className="flex flex-wrap items-center justify-center gap-4 text-slate-500 font-medium">
-          <span>Mboka Ecosystem Kenya</span>
-          <span>•</span>
-          <span>Digital Ledger</span>
-          <span>•</span>
+      {/* Clean Minimal Footer */}
+      <footer className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-6 text-center text-xs text-slate-400 border-t border-slate-200/60 mt-12">
+        <div className="flex flex-wrap items-center justify-center gap-3 text-slate-500 font-medium">
+          <span>Mboka Wallet Kenya</span>
+          <span aria-hidden="true">·</span>
+          <span>M-Pesa STK Push</span>
+          <span aria-hidden="true">·</span>
+          <span>P2P Zero-Fee Transfers</span>
+          <span aria-hidden="true">·</span>
+          <span>Automated B2C Settlement</span>
+          <span aria-hidden="true">·</span>
           <span>Mbogi Affiliate</span>
-          <span>•</span>
-          <span>Monetized Blogging</span>
-          <span>•</span>
-          <span>Instant POS Utilities</span>
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          Built according to the Mboka ChatGPT Framework architecture. Licensed under Apache 2.0.
+          Secure digital ledger &amp; instant payments.
         </p>
       </footer>
     </div>
